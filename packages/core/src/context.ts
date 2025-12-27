@@ -401,15 +401,14 @@ export class Context {
 
     /**
      * Semantic search with unified implementation
-     * @param codebasePath Codebase path to search in
      * @param query Search query
      * @param topK Number of results to return
      * @param threshold Similarity threshold
      */
-    async semanticSearch(codebasePath: string, query: string, topK: number = 5, threshold: number = 0.5, filterExpr?: string): Promise<SemanticSearchResult[]> {
+    async semanticSearch(query: string, topK: number = 5, threshold: number = 0.5, filterExpr?: string): Promise<SemanticSearchResult[]> {
         const isHybrid = this.getIsHybrid();
         const searchType = isHybrid === true ? 'hybrid search' : 'semantic search';
-        console.log(`[Context] 🔍 Executing ${searchType}: "${query}" in ${codebasePath}`);
+        console.log(`[Context] 🔍 Executing ${searchType}: "${query}"`);
 
         const collectionName = this.getCollectionName();
         console.log(`[Context] 🔍 Using collection: ${collectionName}`);
@@ -516,11 +515,10 @@ export class Context {
     }
 
     /**
-     * Check if index exists for codebase
-     * @param codebasePath Codebase path to check
+     * Check if index exists
      * @returns Whether index exists
      */
-    async hasIndex(codebasePath: string): Promise<boolean> {
+    async hasIndex(): Promise<boolean> {
         const collectionName = this.getCollectionName();
         return await this.vectorDatabase.hasCollection(collectionName);
     }
@@ -712,6 +710,7 @@ export class Context {
 
         for (let i = 0; i < filePaths.length; i++) {
             const filePath = filePaths[i];
+            const relativeFilePath = path.relative(codebasePath, filePath);
 
             try {
                 const content = await fs.promises.readFile(filePath, 'utf-8');
@@ -720,9 +719,9 @@ export class Context {
 
                 // Log files with many chunks or large content
                 if (chunks.length > 50) {
-                    console.warn(`[Context] ⚠️  File ${filePath} generated ${chunks.length} chunks (${Math.round(content.length / 1024)}KB)`);
+                    console.warn(`[Context] ⚠️  File ${relativeFilePath} generated ${chunks.length} chunks (${Math.round(content.length / 1024)}KB)`);
                 } else if (content.length > 100000) {
-                    console.log(`📄 Large file ${filePath}: ${Math.round(content.length / 1024)}KB -> ${chunks.length} chunks`);
+                    console.log(`📄 Large file ${relativeFilePath}: ${Math.round(content.length / 1024)}KB -> ${chunks.length} chunks`);
                 }
 
                 // Add chunks to buffer
@@ -754,14 +753,14 @@ export class Context {
                 }
 
                 processedFiles++;
-                onFileProcessed?.(filePath, i + 1, filePaths.length);
+                onFileProcessed?.(relativeFilePath, i + 1, filePaths.length);
 
                 if (limitReached) {
                     break; // Exit the outer loop (over files)
                 }
 
             } catch (error) {
-                console.warn(`[Context] ⚠️  Skipping file ${filePath}: ${error}`);
+                console.warn(`[Context] ⚠️  Skipping file ${relativeFilePath}: ${error}`);
             }
         }
 
@@ -836,6 +835,7 @@ export class Context {
                     fileExtension,
                     metadata: {
                         ...restMetadata,
+                        contextName: this.name,
                         codebasePath,
                         language: chunk.metadata.language || 'unknown',
                         chunkIndex: index
@@ -866,6 +866,7 @@ export class Context {
                     fileExtension,
                     metadata: {
                         ...restMetadata,
+                        contextName: this.name,
                         codebasePath,
                         language: chunk.metadata.language || 'unknown',
                         chunkIndex: index
