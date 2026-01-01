@@ -96,22 +96,13 @@ jobs:
         uses: denoland/setup-deno@v1
         with:
           deno-version: ${{ matrix.deno-version }}
-
-      - name: Type check main module
+      - name: Type check
         working-directory: packages/ai-deno-search
-        run: deno check mod.ts
-
-      - name: Type check tests
-        working-directory: packages/ai-deno-search
-        run: deno check tests/search_context_test.ts
-
-      - name: Type check examples
-        working-directory: packages/ai-deno-search
-        run: deno check examples/basic-search.ts
+        run: deno check
 
       - name: Run tests
         working-directory: packages/ai-deno-search
-        run: deno test --allow-env --allow-net
+        run: deno task test
 
       - name: Format check
         working-directory: packages/ai-deno-search
@@ -120,18 +111,3 @@ jobs:
       - name: Lint
         working-directory: packages/ai-deno-search
         run: deno lint
-
-  # Combined status check
-  ci-success:
-    name: CI Success
-    runs-on: ubuntu-latest
-    needs: [node, deno]
-    if: always()
-    steps:
-      - name: Check all jobs
-        run: |
-          if [ "${{ needs.node.result }}" != "success" ] || [ "${{ needs.deno.result }}" != "success" ]; then
-            echo "One or more CI jobs failed"
-            exit 1
-          fi
-          echo "All CI jobs passed successfully"
