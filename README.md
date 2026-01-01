@@ -8,7 +8,6 @@
 [![npm - core](https://img.shields.io/npm/v/@mcampa/ai-context-core?label=%40zilliz%2Fclaude-context-core&logo=npm)](https://www.npmjs.com/package/@mcampa/ai-context-core)
 [![npm - mcp](https://img.shields.io/npm/v/@mcampa/ai-context-mcp?label=%40zilliz%2Fclaude-context-mcp&logo=npm)](https://www.npmjs.com/package/@mcampa/ai-context-mcp)
 
-
 </div>
 
 **Claude Context** is an MCP plugin that adds semantic code search to Claude Code and other AI coding agents, giving them deep context from your entire codebase.
