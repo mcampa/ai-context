@@ -39,8 +39,9 @@ export class OpenAIEmbedding extends Embedding {
       });
       return response.data[0].embedding.length;
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Unknown error";
+      const errorMessage = error instanceof Error
+        ? error.message
+        : "Unknown error";
 
       if (
         errorMessage.includes("API key") ||
@@ -83,8 +84,9 @@ export class OpenAIEmbedding extends Embedding {
         dimension: this.dimension,
       };
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Unknown error";
+      const errorMessage = error instanceof Error
+        ? error.message
+        : "Unknown error";
       throw new Error(`Failed to generate OpenAI embedding: ${errorMessage}`);
     }
   }
@@ -114,8 +116,9 @@ export class OpenAIEmbedding extends Embedding {
         dimension: this.dimension,
       }));
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Unknown error";
+      const errorMessage = error instanceof Error
+        ? error.message
+        : "Unknown error";
       throw new Error(
         `Failed to generate OpenAI batch embeddings: ${errorMessage}`,
       );

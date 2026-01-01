@@ -33,8 +33,7 @@ export class SearchContext {
     this.vectorDatabase = config.vectorDatabase;
 
     // Get from config or env, default to true
-    this.hybridMode =
-      config.hybridMode ??
+    this.hybridMode = config.hybridMode ??
       (Deno.env.get("HYBRID_MODE")?.toLowerCase() === "false" ? false : true);
 
     console.log(
@@ -71,8 +70,9 @@ export class SearchContext {
     console.log(`[SearchContext] 🔍 Using collection: ${collectionName}`);
 
     // Check if collection exists and has data
-    const hasCollection =
-      await this.vectorDatabase.hasCollection(collectionName);
+    const hasCollection = await this.vectorDatabase.hasCollection(
+      collectionName,
+    );
     if (!hasCollection) {
       console.log(
         `[SearchContext] ⚠️  Collection '${collectionName}' does not exist. Please index the codebase first using @mcampa/ai-context-core.`,
@@ -128,8 +128,8 @@ export class SearchContext {
       console.log(
         `[SearchContext] 🔍 Executing hybrid search with RRF reranking...`,
       );
-      const searchResults: HybridSearchResult[] =
-        await this.vectorDatabase.hybridSearch(collectionName, searchRequests, {
+      const searchResults: HybridSearchResult[] = await this.vectorDatabase
+        .hybridSearch(collectionName, searchRequests, {
           rerank: {
             strategy: "rrf",
             params: { k: 100 },
@@ -170,8 +170,8 @@ export class SearchContext {
       const queryEmbedding: EmbeddingVector = await this.embedding.embed(query);
 
       // 2. Search in vector database
-      const searchResults: VectorSearchResult[] =
-        await this.vectorDatabase.search(
+      const searchResults: VectorSearchResult[] = await this.vectorDatabase
+        .search(
           collectionName,
           queryEmbedding.vector,
           { topK, threshold, filterExpr },

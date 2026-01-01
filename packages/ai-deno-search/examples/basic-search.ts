@@ -107,9 +107,11 @@ async function main() {
       console.log(`   Language: ${result.language}`);
       console.log(`   Score: ${result.score.toFixed(4)}`);
       console.log(
-        `   Preview: ${result.content
-          .substring(0, 150)
-          .replace(/\n/g, " ")}...`,
+        `   Preview: ${
+          result.content
+            .substring(0, 150)
+            .replace(/\n/g, " ")
+        }...`,
       );
       console.log();
     });

@@ -15,3 +15,5 @@ pnpm-lock.yaml
 coverage/
 .nyc_output/
 
+# Deno package
+packages/ai-deno-search/

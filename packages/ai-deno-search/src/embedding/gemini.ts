@@ -59,8 +59,8 @@ export class GeminiEmbedding extends Embedding {
         model: model,
         contents: processedText,
         config: {
-          outputDimensionality:
-            this.config.outputDimensionality || this.dimension,
+          outputDimensionality: this.config.outputDimensionality ||
+            this.dimension,
         },
       });
 
@@ -94,8 +94,8 @@ export class GeminiEmbedding extends Embedding {
         model: model,
         contents: processedTexts,
         config: {
-          outputDimensionality:
-            this.config.outputDimensionality || this.dimension,
+          outputDimensionality: this.config.outputDimensionality ||
+            this.dimension,
         },
       });
 
@@ -164,10 +164,9 @@ export class GeminiEmbedding extends Embedding {
   }
 
   getSupportedDimensions(): number[] {
-    const modelInfo =
-      GeminiEmbedding.getSupportedModels()[
-        this.config.model || "gemini-embedding-001"
-      ];
+    const modelInfo = GeminiEmbedding.getSupportedModels()[
+      this.config.model || "gemini-embedding-001"
+    ];
     return modelInfo?.supportedDimensions || [this.dimension];
   }
 
