@@ -1,6 +1,6 @@
-# Contributing to @zilliz/claude-context-core
+# Contributing to @mcampa/ai-context-core
 
-Thanks for your interest in contributing to the Claude Context core package!
+Thanks for your interest in contributing to the AI Context core package!
 
 > 📖 **First time contributing?** Please read the [main contributing guide](../../CONTRIBUTING.md) first for general setup and workflow.
 

@@ -32,11 +32,11 @@ Welcome to the Claude Context documentation! Claude Context is a powerful tool t
 
 - [GitHub Repository](https://github.com/zilliztech/claude-context)
 - [VSCode Marketplace](https://marketplace.visualstudio.com/items?itemName=zilliz.semanticcodesearch)
-- [npm - Core Package](https://www.npmjs.com/package/@zilliz/claude-context-core)
-- [npm - MCP Server](https://www.npmjs.com/package/@zilliz/claude-context-mcp)
+- [npm - Core Package](https://www.npmjs.com/package/@mcampa/ai-context-core)
+- [npm - MCP Server](https://www.npmjs.com/package/@mcampa/ai-context-mcp)
 - [Zilliz Cloud](https://cloud.zilliz.com)
 
 ## 💬 Support
 
-- **Issues**: [GitHub Issues](https://github.com/zilliztech/claude-context/issues)
+- **Issues**: [GitHub Issues](https://github.com/mcampa/ai-context/issues)
 - **Discord**: [Join our Discord](https://discord.gg/mKc3R95yE5)

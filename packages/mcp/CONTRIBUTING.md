@@ -1,4 +1,4 @@
-# Contributing to @zilliz/claude-context-mcp
+# Contributing to @mcampa/ai-context-mcp
 
 Thanks for your interest in contributing to the Claude Context MCP server!
 
