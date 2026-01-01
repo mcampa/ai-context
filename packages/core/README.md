@@ -135,12 +135,18 @@ interface ContextConfig {
   embedding?: Embedding; // Embedding provider
   vectorDatabase?: VectorDatabase; // Vector database instance (required)
   codeSplitter?: Splitter; // Code splitting strategy
-  supportedExtensions?: string[]; // File extensions to index
-  ignorePatterns?: string[]; // Patterns to ignore
-  customExtensions?: string[]; // Custom extensions from MCP
-  customIgnorePatterns?: string[]; // Custom ignore patterns from MCP
+  supportedExtensions?: string[]; // File extensions to index (replaces defaults if provided)
+  ignorePatterns?: string[]; // Patterns to ignore (replaces defaults if provided)
+  customExtensions?: string[]; // Additional extensions to add to supportedExtensions
+  customIgnorePatterns?: string[]; // Additional patterns to add to ignorePatterns
 }
 ```
+
+**Note on configuration behavior:**
+
+- If you provide `supportedExtensions`, it **replaces** the default extensions entirely
+- If you provide `ignorePatterns`, it **replaces** the default ignore patterns entirely
+- `customExtensions` and `customIgnorePatterns` are **added** to whatever base is used (defaults or your custom ones)
 
 ### Supported File Extensions (Default)
 
@@ -247,12 +253,22 @@ const context = new Context({
 ### Custom File Filtering
 
 ```typescript
+// Replace default extensions and ignore patterns entirely
 const context = new Context({
   name: "my-context",
   embedding,
   vectorDatabase,
-  supportedExtensions: [".ts", ".js", ".py", ".java"],
-  ignorePatterns: ["node_modules/**", "dist/**", "*.spec.ts", "*.test.js"],
+  supportedExtensions: [".ts", ".js", ".py", ".java"], // Only these extensions
+  ignorePatterns: ["node_modules/**", "dist/**", "*.spec.ts", "*.test.js"], // Only these patterns
+});
+
+// Or add to defaults using custom* properties
+const context2 = new Context({
+  name: "my-context",
+  embedding,
+  vectorDatabase,
+  customExtensions: [".vue", ".svelte"], // Adds to default extensions
+  customIgnorePatterns: ["*.spec.ts"], // Adds to default ignore patterns
 });
 ```
 

@@ -124,10 +124,11 @@ export class Context {
         // Load custom extensions from environment variables
         const envCustomExtensions = this.getCustomExtensionsFromEnv();
 
-        // Combine default extensions with config extensions and env extensions
+        // If supportedExtensions is provided, use it as the base (not defaults)
+        // Otherwise use defaults
+        const baseExtensions = config.supportedExtensions || DEFAULT_SUPPORTED_EXTENSIONS;
         const allSupportedExtensions = [
-            ...DEFAULT_SUPPORTED_EXTENSIONS,
-            ...(config.supportedExtensions || []),
+            ...baseExtensions,
             ...(config.customExtensions || []),
             ...envCustomExtensions
         ];
@@ -137,10 +138,11 @@ export class Context {
         // Load custom ignore patterns from environment variables  
         const envCustomIgnorePatterns = this.getCustomIgnorePatternsFromEnv();
 
-        // Start with default ignore patterns
+        // If ignorePatterns is provided, use it as the base (not defaults)
+        // Otherwise use defaults
+        const baseIgnorePatterns = config.ignorePatterns || DEFAULT_IGNORE_PATTERNS;
         const allIgnorePatterns = [
-            ...DEFAULT_IGNORE_PATTERNS,
-            ...(config.ignorePatterns || []),
+            ...baseIgnorePatterns,
             ...(config.customIgnorePatterns || []),
             ...envCustomIgnorePatterns
         ];
