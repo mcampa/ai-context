@@ -38,6 +38,23 @@ jobs:
       - name: Check code formatting
         run: pnpm format:check
 
+      - name: Verify package versions match
+        run: |
+          node -e "
+            const core = require('./packages/core/package.json').version;
+            const mcp = require('./packages/mcp/package.json').version;
+            const cli = require('./packages/cli/package.json').version;
+            console.log('Package versions:');
+            console.log('  core:', core);
+            console.log('  mcp:', mcp);
+            console.log('  cli:', cli);
+            if (core !== mcp || core !== cli) {
+              console.error('ERROR: Package versions do not match!');
+              process.exit(1);
+            }
+            console.log('All package versions match.');
+          "
+
       - name: Lint code
         run: pnpm lint
 
