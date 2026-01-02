@@ -200,24 +200,57 @@ function release() {
   console.log(`   Current version: ${currentVersion}`);
   console.log(`   New version: ${version}`);
 
-  // Step 4: Validate new version is higher or equal
+  // Step 4: Check if tag already exists
+  let tagExists = false;
+  try {
+    execSync(`git rev-parse ${tagVersion}`, {
+      encoding: "utf-8",
+      cwd: rootDir,
+      stdio: "pipe", // Suppress stderr output
+    });
+    tagExists = true;
+  } catch {
+    // Tag doesn't exist
+  }
+
+  // Step 5: Validate version
   const comparison = compareSemver(version, currentVersion);
+
   if (comparison < 0) {
+    // Version is lower than current - never allowed
     console.error("");
     console.error(
-      `❌ Error: New version (${version}) must be higher than or equal to current version (${currentVersion})`,
+      `❌ Error: New version (${version}) must be higher than current version (${currentVersion})`,
     );
     process.exit(1);
   }
+
   if (comparison === 0) {
+    // Same version - only allowed if tag doesn't exist (re-release)
+    if (tagExists) {
+      console.error("");
+      console.error(
+        `❌ Error: Version ${version} is already released (tag ${tagVersion} exists)`,
+      );
+      console.error(`   Use a higher version number to release.`);
+      process.exit(1);
+    }
     console.log(
-      `   ⚠️  Version ${version} is the same as current version (re-release)`,
+      `   ⚠️  Version ${version} is the same as current version (creating missing tag)`,
     );
   } else {
+    // Version is higher - normal release
+    if (tagExists) {
+      console.error("");
+      console.error(`❌ Error: Tag ${tagVersion} already exists`);
+      process.exit(1);
+    }
     console.log(`   ✅ Version ${version} is higher than ${currentVersion}`);
   }
 
-  // Step 5: Check git status
+  const isReRelease = comparison === 0;
+
+  // Step 6: Check git status
   console.log("");
   console.log("🔍 Checking git status...");
   if (!isGitClean()) {
@@ -228,26 +261,7 @@ function release() {
   }
   console.log("   ✅ Git working directory is clean");
 
-  // Step 6: Check if tag already exists
-  let tagExists = false;
-  try {
-    execSync(`git rev-parse ${tagVersion}`, {
-      encoding: "utf-8",
-      cwd: rootDir,
-      stdio: "pipe", // Suppress stderr output
-    });
-    tagExists = true;
-  } catch {
-    // Tag doesn't exist, which is what we want
-  }
-
-  if (tagExists) {
-    console.error(`❌ Error: Tag ${tagVersion} already exists`);
-    process.exit(1);
-  }
-
   // Step 7: Update package.json files (skip if same version)
-  const isReRelease = comparison === 0;
 
   if (isReRelease) {
     console.log("");
