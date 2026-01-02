@@ -229,34 +229,50 @@ function release() {
   console.log("   ✅ Git working directory is clean");
 
   // Step 6: Check if tag already exists
+  let tagExists = false;
   try {
-    exec(`git rev-parse ${tagVersion}`);
-    console.error(`❌ Error: Tag ${tagVersion} already exists`);
-    process.exit(1);
+    execSync(`git rev-parse ${tagVersion}`, {
+      encoding: "utf-8",
+      cwd: rootDir,
+      stdio: "pipe", // Suppress stderr output
+    });
+    tagExists = true;
   } catch {
     // Tag doesn't exist, which is what we want
   }
 
-  // Step 7: Update package.json files
-  console.log("");
-  console.log("📝 Updating package.json files...");
-  packages.forEach((p) => {
-    p.content.version = version;
-    writePackageJson(p.path, p.content);
-    console.log(`   ✅ Updated ${p.relativePath}`);
-  });
-
-  // Step 8: Commit changes
-  console.log("");
-  console.log("💾 Committing changes...");
-  try {
-    exec("git add packages/*/package.json");
-    exec(`git commit -m "chore: release ${tagVersion}"`);
-    console.log(`   ✅ Committed: chore: release ${tagVersion}`);
-  } catch (error) {
-    console.error("❌ Error: Failed to commit changes");
-    console.error(error.message);
+  if (tagExists) {
+    console.error(`❌ Error: Tag ${tagVersion} already exists`);
     process.exit(1);
+  }
+
+  // Step 7: Update package.json files (skip if same version)
+  const isReRelease = comparison === 0;
+
+  if (isReRelease) {
+    console.log("");
+    console.log("📝 Skipping package.json updates (same version)...");
+  } else {
+    console.log("");
+    console.log("📝 Updating package.json files...");
+    packages.forEach((p) => {
+      p.content.version = version;
+      writePackageJson(p.path, p.content);
+      console.log(`   ✅ Updated ${p.relativePath}`);
+    });
+
+    // Step 8: Commit changes
+    console.log("");
+    console.log("💾 Committing changes...");
+    try {
+      exec("git add packages/*/package.json");
+      exec(`git commit -m "chore: release ${tagVersion}"`);
+      console.log(`   ✅ Committed: chore: release ${tagVersion}`);
+    } catch (error) {
+      console.error("❌ Error: Failed to commit changes");
+      console.error(error.message);
+      process.exit(1);
+    }
   }
 
   // Step 9: Create tag
@@ -275,15 +291,21 @@ function release() {
   console.log("");
   console.log("🚀 Pushing to remote...");
   try {
-    exec("git push");
+    if (!isReRelease) {
+      exec("git push");
+    }
     exec(`git push origin ${tagVersion}`);
-    console.log("   ✅ Pushed commit and tag");
+    console.log(
+      isReRelease ? "   ✅ Pushed tag" : "   ✅ Pushed commit and tag",
+    );
   } catch (error) {
     console.error("❌ Error: Failed to push to remote");
     console.error(error.message);
     console.error("");
     console.error("You can manually push with:");
-    console.error("   git push");
+    if (!isReRelease) {
+      console.error("   git push");
+    }
     console.error(`   git push origin ${tagVersion}`);
     process.exit(1);
   }
