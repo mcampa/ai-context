@@ -2,6 +2,7 @@
   "name": "@mcampa/ai-context",
   "version": "0.0.1",
   "description": "A powerful code indexing tool with multi-platform support",
+  "type": "module",
   "private": true,
   "scripts": {
     "build": "pnpm -r build",
