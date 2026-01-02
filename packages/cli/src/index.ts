@@ -28,7 +28,7 @@ const program = new Command();
 program
   .name("ai-context-index")
   .description("Index your codebase for AI-powered semantic search")
-  .version(VERSION)
+  .version(VERSION, "-v, --version", "Display version number")
   .option(
     "-c, --config <path>",
     "Path to config file (default: ai-context.config.ts/js)",
@@ -43,6 +43,7 @@ program
       console.log(
         "║             AI Context CLI - Codebase Indexer              ║",
       );
+      console.log(`║                        Version ${VERSION.padEnd(25)} ║`);
       console.log(
         "╚════════════════════════════════════════════════════════════╝",
       );
@@ -88,5 +89,11 @@ process.on("unhandledRejection", (reason) => {
   console.error("❌ Unhandled rejection:", reason);
   process.exit(1);
 });
+
+// Show version if no arguments provided (just the command name)
+if (process.argv.length === 2) {
+  console.log(`@mcampa/ai-context-cli version ${VERSION}`);
+  process.exit(0);
+}
 
 program.parse();
