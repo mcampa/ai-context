@@ -1,45 +1,38 @@
+import type { BaseDatabaseConfig } from "./base/base-vector-database";
+import type {
+  HybridSearchOptions,
+  HybridSearchRequest,
+  HybridSearchResult,
+  SearchOptions,
+  VectorDocument,
+  VectorSearchResult,
+} from "./types";
 import {
-  MilvusClient,
   DataType,
-  MetricType,
   FunctionType,
   LoadState,
-  type HybridSearchReq,
-  type SearchSimpleReq,
-  type QueryReq,
+  MetricType,
+  MilvusClient,
 } from "@zilliz/milvus2-sdk-node";
-import type {
-  VectorDocument,
-  SearchOptions,
-  VectorSearchResult,
-  VectorDatabase,
-  HybridSearchRequest,
-  HybridSearchOptions,
-  HybridSearchResult,
-} from "./types";
+import { BaseVectorDatabase } from "./base/base-vector-database";
 import { ClusterManager } from "./zilliz-utils";
 
-export interface MilvusConfig {
-  address?: string;
-  token?: string;
-  username?: string;
-  password?: string;
+export interface MilvusConfig extends BaseDatabaseConfig {
   ssl?: boolean;
 }
 
-export class MilvusVectorDatabase implements VectorDatabase {
-  protected config: MilvusConfig;
+export class MilvusVectorDatabase extends BaseVectorDatabase<MilvusConfig> {
   private client: MilvusClient | null = null;
-  protected initializationPromise: Promise<void>;
 
   constructor(config: MilvusConfig) {
-    this.config = config;
-
-    // Start initialization asynchronously without waiting
-    this.initializationPromise = this.initialize();
+    super(config);
   }
 
-  private async initialize(): Promise<void> {
+  /**
+   * @override
+   * Initializes the Milvus vector database by resolving the address and creating a client connection.
+   */
+  protected async initialize(): Promise<void> {
     const resolvedAddress = await this.resolveAddress();
     await this.initializeClient(resolvedAddress);
   }
@@ -48,7 +41,7 @@ export class MilvusVectorDatabase implements VectorDatabase {
     const milvusConfig = this.config as MilvusConfig;
     console.log("🔌 Connecting to vector database at: ", address);
     this.client = new MilvusClient({
-      address: address,
+      address,
       username: milvusConfig.username,
       password: milvusConfig.password,
       token: milvusConfig.token,
@@ -80,10 +73,10 @@ export class MilvusVectorDatabase implements VectorDatabase {
   }
 
   /**
-   * Ensure initialization is complete before method execution
+   * Override to add client null check
    */
-  protected async ensureInitialized(): Promise<void> {
-    await this.initializationPromise;
+  protected override async ensureInitialized(): Promise<void> {
+    await super.ensureInitialized();
     if (!this.client) {
       throw new Error("Client not initialized");
     }
@@ -413,13 +406,9 @@ export class MilvusVectorDatabase implements VectorDatabase {
     }
 
     const result = await this.client.showCollections();
-    // Handle the response format - the Milvus SDK returns different formats
-    const resultData = result as {
-      collection_names?: string[];
-      collections?: string[];
-    };
+    // Handle the response format - cast to any to avoid type errors
     const collections =
-      resultData.collection_names || resultData.collections || [];
+      (result as any).collection_names || (result as any).collections || [];
     return Array.isArray(collections) ? collections : [];
   }
 
@@ -450,7 +439,7 @@ export class MilvusVectorDatabase implements VectorDatabase {
 
     await this.client.insert({
       collection_name: collectionName,
-      data: data,
+      data,
     });
   }
 
@@ -468,7 +457,7 @@ export class MilvusVectorDatabase implements VectorDatabase {
       );
     }
 
-    const searchParams: SearchSimpleReq = {
+    const searchParams: any = {
       collection_name: collectionName,
       data: [queryVector],
       limit: options?.topK || 10,
@@ -494,16 +483,16 @@ export class MilvusVectorDatabase implements VectorDatabase {
       return [];
     }
 
-    return searchResult.results.map((result) => ({
+    return searchResult.results.map((result: any) => ({
       document: {
         id: result.id,
         vector: queryVector,
-        content: String(result.content || ""),
-        relativePath: String(result.relativePath || ""),
-        startLine: Number(result.startLine || 0),
-        endLine: Number(result.endLine || 0),
-        fileExtension: String(result.fileExtension || ""),
-        metadata: JSON.parse(String(result.metadata || "{}")),
+        content: result.content,
+        relativePath: result.relativePath,
+        startLine: result.startLine,
+        endLine: result.endLine,
+        fileExtension: result.fileExtension,
+        metadata: JSON.parse(result.metadata || "{}"),
       },
       score: result.score,
     }));
@@ -530,7 +519,7 @@ export class MilvusVectorDatabase implements VectorDatabase {
     filter: string,
     outputFields: string[],
     limit?: number,
-  ): Promise<Record<string, unknown>[]> {
+  ): Promise<Record<string, any>[]> {
     await this.ensureInitialized();
     await this.ensureLoaded(collectionName);
 
@@ -541,9 +530,9 @@ export class MilvusVectorDatabase implements VectorDatabase {
     }
 
     try {
-      const queryParams: QueryReq = {
+      const queryParams: any = {
         collection_name: collectionName,
-        filter: filter,
+        filter,
         output_fields: outputFields,
       };
 
@@ -654,7 +643,7 @@ export class MilvusVectorDatabase implements VectorDatabase {
       description:
         description || `Hybrid code context collection: ${collectionName}`,
       fields: schema,
-      functions: functions,
+      functions,
     };
 
     if (!this.client) {
@@ -734,7 +723,7 @@ export class MilvusVectorDatabase implements VectorDatabase {
 
     await this.client.insert({
       collection_name: collectionName,
-      data: data,
+      data,
     });
   }
 
@@ -807,7 +796,7 @@ export class MilvusVectorDatabase implements VectorDatabase {
             limit: search_param_2.limit,
             query_text:
               typeof search_param_2.data === "string"
-                ? search_param_2.data.substring(0, 50) + "..."
+                ? `${search_param_2.data.substring(0, 50)}...`
                 : "N/A",
           },
           null,
@@ -820,7 +809,7 @@ export class MilvusVectorDatabase implements VectorDatabase {
       );
 
       // Execute hybrid search using the correct client.search format
-      const searchParams: HybridSearchReq & { expr?: string } = {
+      const searchParams: any = {
         collection_name: collectionName,
         data: [search_param_1, search_param_2],
         limit: options?.limit || searchRequests[0]?.limit || 10,
@@ -870,16 +859,17 @@ export class MilvusVectorDatabase implements VectorDatabase {
       );
 
       // Transform results to HybridSearchResult format
-      return searchResult.results.map((result) => ({
+      return searchResult.results.map((result: any) => ({
         document: {
           id: result.id,
-          content: String(result.content || ""),
+          content: result.content,
           vector: [],
-          relativePath: String(result.relativePath || ""),
-          startLine: Number(result.startLine || 0),
-          endLine: Number(result.endLine || 0),
-          fileExtension: String(result.fileExtension || ""),
-          metadata: JSON.parse(String(result.metadata || "{}")),
+          sparse_vector: [],
+          relativePath: result.relativePath,
+          startLine: result.startLine,
+          endLine: result.endLine,
+          fileExtension: result.fileExtension,
+          metadata: JSON.parse(result.metadata || "{}"),
         },
         score: result.score,
       }));
@@ -933,9 +923,9 @@ export class MilvusVectorDatabase implements VectorDatabase {
         });
       }
       return true;
-    } catch (error) {
+    } catch (error: any) {
       // Check if the error message contains the collection limit exceeded pattern
-      const errorMessage = String(error);
+      const errorMessage = error.message || error.toString() || "";
       if (/exceeded the limit number of collections/i.test(errorMessage)) {
         // Return false for collection limit exceeded
         return false;

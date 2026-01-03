@@ -7,12 +7,12 @@ export interface VectorDocument {
   startLine: number;
   endLine: number;
   fileExtension: string;
-  metadata: Record<string, unknown>;
+  metadata: Record<string, any>;
 }
 
 export interface SearchOptions {
   topK?: number;
-  filter?: Record<string, unknown>;
+  filter?: Record<string, any>;
   threshold?: number;
   filterExpr?: string;
 }
@@ -21,7 +21,7 @@ export interface SearchOptions {
 export interface HybridSearchRequest {
   data: number[] | string; // Query vector or text
   anns_field: string; // Vector field name (vector or sparse_vector)
-  param: Record<string, unknown>; // Search parameters
+  param: Record<string, any>; // Search parameters
   limit: number;
 }
 
@@ -33,7 +33,7 @@ export interface HybridSearchOptions {
 
 export interface RerankStrategy {
   strategy: "rrf" | "weighted";
-  params?: Record<string, unknown>;
+  params?: Record<string, any>;
 }
 
 export interface VectorSearchResult {
@@ -53,11 +53,11 @@ export interface VectorDatabase {
    * @param dimension Vector dimension
    * @param description Collection description
    */
-  createCollection(
+  createCollection: (
     collectionName: string,
     dimension: number,
     description?: string,
-  ): Promise<void>;
+  ) => Promise<void>;
 
   /**
    * Create collection with hybrid search support
@@ -65,45 +65,48 @@ export interface VectorDatabase {
    * @param dimension Dense vector dimension
    * @param description Collection description
    */
-  createHybridCollection(
+  createHybridCollection: (
     collectionName: string,
     dimension: number,
     description?: string,
-  ): Promise<void>;
+  ) => Promise<void>;
 
   /**
    * Drop collection
    * @param collectionName Collection name
    */
-  dropCollection(collectionName: string): Promise<void>;
+  dropCollection: (collectionName: string) => Promise<void>;
 
   /**
    * Check if collection exists
    * @param collectionName Collection name
    */
-  hasCollection(collectionName: string): Promise<boolean>;
+  hasCollection: (collectionName: string) => Promise<boolean>;
 
   /**
    * List all collections
    */
-  listCollections(): Promise<string[]>;
+  listCollections: () => Promise<string[]>;
 
   /**
    * Insert vector documents
    * @param collectionName Collection name
    * @param documents Document array
    */
-  insert(collectionName: string, documents: VectorDocument[]): Promise<void>;
+  insert: (
+    collectionName: string,
+    documents: VectorDocument[],
+  ) => Promise<void>;
 
   /**
    * Insert hybrid vector documents
    * @param collectionName Collection name
    * @param documents Document array
    */
-  insertHybrid(
+  insertHybrid: (
     collectionName: string,
     documents: VectorDocument[],
-  ): Promise<void>;
+  ) => Promise<void>;
 
   /**
    * Search similar vectors
@@ -111,11 +114,11 @@ export interface VectorDatabase {
    * @param queryVector Query vector
    * @param options Search options
    */
-  search(
+  search: (
     collectionName: string,
     queryVector: number[],
     options?: SearchOptions,
-  ): Promise<VectorSearchResult[]>;
+  ) => Promise<VectorSearchResult[]>;
 
   /**
    * Hybrid search with multiple vector fields
@@ -123,18 +126,18 @@ export interface VectorDatabase {
    * @param searchRequests Array of search requests for different fields
    * @param options Hybrid search options including reranking
    */
-  hybridSearch(
+  hybridSearch: (
     collectionName: string,
     searchRequests: HybridSearchRequest[],
     options?: HybridSearchOptions,
-  ): Promise<HybridSearchResult[]>;
+  ) => Promise<HybridSearchResult[]>;
 
   /**
    * Delete documents
    * @param collectionName Collection name
    * @param ids Document ID array
    */
-  delete(collectionName: string, ids: string[]): Promise<void>;
+  delete: (collectionName: string, ids: string[]) => Promise<void>;
 
   /**
    * Query documents with filter conditions
@@ -143,18 +146,18 @@ export interface VectorDatabase {
    * @param outputFields Fields to return
    * @param limit Maximum number of results
    */
-  query(
+  query: (
     collectionName: string,
     filter: string,
     outputFields: string[],
     limit?: number,
-  ): Promise<Record<string, unknown>[]>;
+  ) => Promise<Record<string, any>[]>;
 
   /**
    * Check collection limit
    * Returns true if collection can be created, false if limit exceeded
    */
-  checkCollectionLimit(): Promise<boolean>;
+  checkCollectionLimit: () => Promise<boolean>;
 }
 
 /**

@@ -30,25 +30,25 @@ export interface Splitter {
    * @param filePath File path
    * @returns Array of code chunks
    */
-  split(
+  split: (
     code: string,
     language: string,
     filePath?: string,
-  ): Promise<CodeChunk[]>;
+  ) => Promise<CodeChunk[]>;
 
   /**
    * Set chunk size
    * @param chunkSize Chunk size
    */
-  setChunkSize(chunkSize: number): void;
+  setChunkSize: (chunkSize: number) => void;
 
   /**
    * Set chunk overlap size
    * @param chunkOverlap Chunk overlap size
    */
-  setChunkOverlap(chunkOverlap: number): void;
+  setChunkOverlap: (chunkOverlap: number) => void;
 }
 
+export * from "./ast-splitter";
 // Implementation class exports
 export * from "./langchain-splitter";
-export * from "./ast-splitter";

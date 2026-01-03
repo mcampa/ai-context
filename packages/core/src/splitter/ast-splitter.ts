@@ -1,16 +1,17 @@
 import Parser from "tree-sitter";
-import { Splitter, CodeChunk } from "./index";
-import type { LangChainCodeSplitter } from "./langchain-splitter";
 
 // Language parsers
 const JavaScript = require("tree-sitter-javascript");
+
+import { CodeChunk, Splitter } from "./index";
+import { LangChainCodeSplitter } from "./langchain-splitter";
 const TypeScript = require("tree-sitter-typescript").typescript;
-const Python = require("tree-sitter-python");
-const Java = require("tree-sitter-java");
+const CSharp = require("tree-sitter-c-sharp");
 const Cpp = require("tree-sitter-cpp");
 const Go = require("tree-sitter-go");
+const Java = require("tree-sitter-java");
+const Python = require("tree-sitter-python");
 const Rust = require("tree-sitter-rust");
-const CSharp = require("tree-sitter-c-sharp");
 const Scala = require("tree-sitter-scala");
 
 // Node types that represent logical code units
@@ -79,19 +80,11 @@ const SPLITTABLE_NODE_TYPES = {
   ],
 };
 
-// Language config type for tree-sitter parsers
-// The parser type is the result of require('tree-sitter-*') which returns an object
-// that can be passed to Parser.setLanguage()
-interface LanguageConfig {
-  parser: ReturnType<typeof require>;
-  nodeTypes: string[];
-}
-
 export class AstCodeSplitter implements Splitter {
   private chunkSize: number = 2500;
   private chunkOverlap: number = 300;
   private parser: Parser;
-  private langchainFallback: LangChainCodeSplitter;
+  private langchainFallback: any; // LangChainCodeSplitter for fallback
 
   constructor(chunkSize?: number, chunkOverlap?: number) {
     if (chunkSize) this.chunkSize = chunkSize;
@@ -99,7 +92,6 @@ export class AstCodeSplitter implements Splitter {
     this.parser = new Parser();
 
     // Initialize fallback splitter
-    const { LangChainCodeSplitter } = require("./langchain-splitter");
     this.langchainFallback = new LangChainCodeSplitter(chunkSize, chunkOverlap);
   }
 
@@ -163,8 +155,10 @@ export class AstCodeSplitter implements Splitter {
     this.langchainFallback.setChunkOverlap(chunkOverlap);
   }
 
-  private getLanguageConfig(language: string): LanguageConfig | null {
-    const langMap: Record<string, LanguageConfig> = {
+  private getLanguageConfig(
+    language: string,
+  ): { parser: any; nodeTypes: string[] } | null {
+    const langMap: Record<string, { parser: any; nodeTypes: string[] }> = {
       javascript: {
         parser: JavaScript,
         nodeTypes: SPLITTABLE_NODE_TYPES.javascript,
@@ -281,7 +275,7 @@ export class AstCodeSplitter implements Splitter {
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
-      const lineWithNewline = i === lines.length - 1 ? line : line + "\n";
+      const lineWithNewline = i === lines.length - 1 ? line : `${line}\n`;
 
       if (
         currentChunk.length + lineWithNewline.length > this.chunkSize &&
@@ -338,7 +332,7 @@ export class AstCodeSplitter implements Splitter {
       if (i > 0 && this.chunkOverlap > 0) {
         const prevChunk = chunks[i - 1];
         const overlapText = prevChunk.content.slice(-this.chunkOverlap);
-        content = overlapText + "\n" + content;
+        content = `${overlapText}\n${content}`;
         metadata.startLine = Math.max(
           1,
           metadata.startLine - this.getLineCount(overlapText),

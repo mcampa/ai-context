@@ -1,8 +1,8 @@
-import * as fs from "fs/promises";
-import * as path from "path";
-import * as crypto from "crypto";
+import * as crypto from "node:crypto";
+import * as fs from "node:fs/promises";
+import * as os from "node:os";
+import * as path from "node:path";
 import { MerkleDAG } from "./merkle";
-import * as os from "os";
 
 export class FileSynchronizer {
   private fileHashes: Map<string, string>;
@@ -223,12 +223,12 @@ export class FileSynchronizer {
     keys.forEach((key) => {
       valuesString += fileHashes.get(key);
     });
-    const rootNodeData = "root:" + valuesString;
+    const rootNodeData = `root:${valuesString}`;
     const rootNodeId = dag.addNode(rootNodeData);
 
     // Add each file as a child of the root
     for (const path of sortedPaths) {
-      const fileData = path + ":" + fileHashes.get(path);
+      const fileData = `${path}:${fileHashes.get(path)}`;
       dag.addNode(fileData, rootNodeId);
     }
 

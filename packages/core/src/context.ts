@@ -1,18 +1,21 @@
-import { Splitter, CodeChunk, AstCodeSplitter } from "./splitter";
-import { Embedding, EmbeddingVector, OpenAIEmbedding } from "./embedding";
-import {
+import type { Embedding, EmbeddingVector } from "./embedding";
+import type { CodeChunk, Splitter } from "./splitter";
+import type { SemanticSearchResult } from "./types";
+import type {
+  HybridSearchRequest,
+  HybridSearchResult,
   VectorDatabase,
   VectorDocument,
   VectorSearchResult,
-  HybridSearchRequest,
-  HybridSearchResult,
 } from "./vectordb";
-import { SemanticSearchResult } from "./types";
-import { envManager } from "./utils/env-manager";
-import * as fs from "fs";
-import * as path from "path";
-import * as crypto from "crypto";
+import * as crypto from "node:crypto";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { OpenAIEmbedding } from "./embedding";
+import { AstCodeSplitter } from "./splitter";
 import { FileSynchronizer } from "./sync/synchronizer";
+import { envManager } from "./utils/env-manager";
+import { QdrantVectorDatabase } from "./vectordb/qdrant-vectordb";
 
 const DEFAULT_SUPPORTED_EXTENSIONS = [
   // Programming languages
@@ -131,7 +134,7 @@ export class Context {
   private ignorePatterns: string[];
   private synchronizers = new Map<string, FileSynchronizer>();
 
-  constructor(config: ContextConfig) {
+  constructor(config: ContextConfig = {}) {
     this.name = config.name || "my-context";
     // Initialize services
     this.embedding =
@@ -396,6 +399,20 @@ export class Context {
       percentage: number;
     }) => void,
   ): Promise<{ added: number; removed: number; modified: number }> {
+    // Validate that the codebase path exists
+    const normalizedPath = path.resolve(codebasePath);
+    try {
+      const stat = await fs.promises.stat(normalizedPath);
+      if (!stat.isDirectory()) {
+        throw new Error(`Codebase path is not a directory: ${normalizedPath}`);
+      }
+    } catch (error: any) {
+      if (error.code === "ENOENT") {
+        throw new Error(`Codebase path does not exist: ${normalizedPath}`);
+      }
+      throw error;
+    }
+
     const collectionName = this.getCollectionName();
     const synchronizer = this.synchronizers.get(collectionName);
 
@@ -569,6 +586,23 @@ export class Context {
         );
       }
 
+      // Load BM25 model if using Qdrant and model is not yet trained
+      if (this.vectorDatabase instanceof QdrantVectorDatabase) {
+        const bm25Generator = this.vectorDatabase.getBM25Generator();
+        if (!bm25Generator.isTrained()) {
+          console.log(
+            "[Context] 📂 BM25 model not loaded, attempting to load from disk...",
+          );
+          const loaded =
+            await this.vectorDatabase.loadBM25Model(collectionName);
+          if (!loaded) {
+            console.warn(
+              "[Context] ⚠️  Failed to load BM25 model. Hybrid search quality may be degraded.",
+            );
+          }
+        }
+      }
+
       // 1. Generate query vector
       console.log(`[Context] 🔍 Generating embeddings for query: "${query}"`);
       const queryEmbedding: EmbeddingVector = await this.embedding.embed(query);
@@ -657,7 +691,7 @@ export class Context {
         relativePath: result.document.relativePath,
         startLine: result.document.startLine,
         endLine: result.document.endLine,
-        language: String(result.document.metadata.language || "unknown"),
+        language: result.document.metadata.language || "unknown",
         score: result.score,
       }));
 
@@ -673,6 +707,106 @@ export class Context {
   async hasIndex(): Promise<boolean> {
     const collectionName = this.getCollectionName();
     return await this.vectorDatabase.hasCollection(collectionName);
+  }
+
+  /**
+   * Get collection statistics from vector database
+   *
+   * Retrieves actual counts of indexed files and chunks by querying the vector database.
+   * This is more accurate than snapshot data which may be out of sync.
+   *
+   * @param codebasePath Codebase path to get stats for
+   * @returns Object with indexedFiles (unique files) and totalChunks, or null if:
+   *   - Collection doesn't exist in vector database
+   *   - Collection cannot be loaded (expected error)
+   *   - Query fails with known recoverable error
+   *
+   * @throws Error for unexpected failures (network errors, auth failures, programming bugs)
+   *
+   * @remarks
+   * - Uses a limit of 100k chunks. For larger codebases, stats may be underreported.
+   * - Queries only relativePath field to minimize data transfer
+   * - File count is derived by counting unique relativePath values
+   * - Performance: O(n) where n is min(actualChunks, 100000)
+   * - Warns if limit is reached (may indicate incomplete stats)
+   */
+  async getCollectionStats(
+    codebasePath: string,
+  ): Promise<{ indexedFiles: number; totalChunks: number } | null> {
+    const collectionName = this.getCollectionName();
+
+    // Check if collection exists
+    const hasCollection =
+      await this.vectorDatabase.hasCollection(collectionName);
+    if (!hasCollection) {
+      return null;
+    }
+
+    try {
+      // Query documents up to limit (may not retrieve all chunks if codebase exceeds this limit)
+      // Note: This is a best-effort approach. For codebases with >100k chunks, consider pagination.
+      const allDocs = await this.vectorDatabase.query(
+        collectionName,
+        "", // Empty filter expression (no filtering, query all documents)
+        ["relativePath"], // Only need file path for counting
+        100000, // Attempt to retrieve up to 100k chunks (actual limit may vary by vector DB implementation)
+      );
+
+      const totalChunks = allDocs.length;
+
+      // Warn if we hit the query limit - actual collection may be larger
+      if (totalChunks === 100000) {
+        console.warn(
+          `[Context] ⚠️  Retrieved maximum limit of 100k chunks for ${codebasePath}. ` +
+            `Actual total may be higher. Stats may be incomplete.`,
+        );
+      }
+
+      // Filter out documents with missing relativePath before counting
+      const validPaths = allDocs
+        .map((doc) => doc.relativePath)
+        .filter((path): path is string => path != null && path !== "");
+
+      const uniqueFiles = new Set(validPaths).size;
+
+      return {
+        indexedFiles: uniqueFiles,
+        totalChunks,
+      };
+    } catch (error) {
+      const dbType = this.vectorDatabase.constructor.name;
+
+      // Log with full context for debugging
+      console.error(
+        `[Context] ❌ Failed to retrieve collection stats\n` +
+          `  Codebase: ${codebasePath}\n` +
+          `  Collection: ${collectionName}\n` +
+          `  Database: ${dbType}\n` +
+          `  Error:`,
+        error,
+      );
+
+      // Only catch specific expected errors - let unexpected errors propagate
+      if (error instanceof Error) {
+        const errorMsg = error.message;
+
+        // Known recoverable errors that should return null
+        if (
+          errorMsg.includes("collection not loaded") ||
+          errorMsg.includes("collection not exist") ||
+          errorMsg.includes("Failed to query")
+        ) {
+          console.warn(
+            `[Context] ⚠️  Collection exists but query failed (recoverable): ${errorMsg}`,
+          );
+          return null;
+        }
+      }
+
+      // All other errors indicate serious problems and should propagate
+      // (network failures, auth errors, programming bugs, etc.)
+      throw error;
+    }
   }
 
   /**
@@ -711,6 +845,11 @@ export class Context {
 
     if (collectionExists) {
       await this.vectorDatabase.dropCollection(collectionName);
+    }
+
+    // Delete BM25 model if using Qdrant
+    if (this.vectorDatabase instanceof QdrantVectorDatabase) {
+      await this.vectorDatabase.deleteBM25Model(collectionName);
     }
 
     // Delete snapshot file
@@ -918,12 +1057,17 @@ export class Context {
     const isHybrid = this.getIsHybrid();
     const EMBEDDING_BATCH_SIZE = Math.max(
       1,
-      parseInt(envManager.get("EMBEDDING_BATCH_SIZE") || "100", 10),
+      Number.parseInt(envManager.get("EMBEDDING_BATCH_SIZE") || "100", 10),
     );
     const CHUNK_LIMIT = 450000;
     console.log(
       `[Context] 🔧 Using EMBEDDING_BATCH_SIZE: ${EMBEDDING_BATCH_SIZE}`,
     );
+
+    // For Qdrant hybrid search, we need to train BM25 on the full corpus first
+    const needsBM25Training =
+      isHybrid && this.vectorDatabase instanceof QdrantVectorDatabase;
+    const allChunks: Array<{ chunk: CodeChunk; codebasePath: string }> = [];
 
     let chunkBuffer: Array<{ chunk: CodeChunk; codebasePath: string }> = [];
     let processedFiles = 0;
@@ -956,11 +1100,20 @@ export class Context {
 
         // Add chunks to buffer
         for (const chunk of chunks) {
-          chunkBuffer.push({ chunk, codebasePath });
           totalChunks++;
 
-          // Process batch when buffer reaches EMBEDDING_BATCH_SIZE
-          if (chunkBuffer.length >= EMBEDDING_BATCH_SIZE) {
+          // For Qdrant hybrid, collect all chunks. For others, add to buffer.
+          if (needsBM25Training) {
+            allChunks.push({ chunk, codebasePath });
+          } else {
+            chunkBuffer.push({ chunk, codebasePath });
+          }
+
+          // Process batch when buffer reaches EMBEDDING_BATCH_SIZE (skip for Qdrant hybrid)
+          if (
+            !needsBM25Training &&
+            chunkBuffer.length >= EMBEDDING_BATCH_SIZE
+          ) {
             try {
               await this.processChunkBuffer(chunkBuffer);
             } catch (error) {
@@ -1000,8 +1153,48 @@ export class Context {
       }
     }
 
-    // Process any remaining chunks in the buffer
-    if (chunkBuffer.length > 0) {
+    // For Qdrant hybrid, train BM25 and process all chunks
+    if (needsBM25Training && allChunks.length > 0) {
+      console.log(
+        `[Context] 🎓 Training BM25 on ${allChunks.length} chunks for Qdrant hybrid search...`,
+      );
+
+      // Extract corpus texts for BM25 training
+      const corpus = allChunks.map((item) => item.chunk.content);
+
+      // Get BM25 generator and train it
+      if (this.vectorDatabase instanceof QdrantVectorDatabase) {
+        const collectionName = this.getCollectionName();
+        const bm25Generator = this.vectorDatabase.getBM25Generator();
+        bm25Generator.learn(corpus);
+        console.log(
+          `[Context] ✅ BM25 training completed on ${corpus.length} documents`,
+        );
+
+        // Save BM25 model to disk for future use
+        await this.vectorDatabase.saveBM25Model(collectionName);
+      }
+
+      // Now process all chunks in batches
+      console.log(
+        `[Context] 📝 Processing ${allChunks.length} chunks in batches of ${EMBEDDING_BATCH_SIZE}...`,
+      );
+      for (let i = 0; i < allChunks.length; i += EMBEDDING_BATCH_SIZE) {
+        const batch = allChunks.slice(i, i + EMBEDDING_BATCH_SIZE);
+        try {
+          await this.processChunkBuffer(batch);
+          console.log(
+            `[Context] 📊 Processed batch ${Math.floor(i / EMBEDDING_BATCH_SIZE) + 1}/${Math.ceil(allChunks.length / EMBEDDING_BATCH_SIZE)}`,
+          );
+        } catch (error) {
+          console.error(`[Context] ❌ Failed to process chunk batch:`, error);
+          if (error instanceof Error) {
+            console.error("[Context] Stack trace:", error.stack);
+          }
+        }
+      }
+    } else if (chunkBuffer.length > 0) {
+      // Process any remaining chunks in the buffer (for non-Qdrant hybrid)
       const searchType = isHybrid === true ? "hybrid" : "regular";
       console.log(
         `📝 Processing final batch of ${chunkBuffer.length} chunks for ${searchType}`,
@@ -1314,13 +1507,13 @@ export class Context {
    */
   private async loadGlobalIgnoreFile(): Promise<string[]> {
     try {
-      const homeDir = require("os").homedir();
+      const homeDir = require("node:os").homedir();
       const globalIgnorePath = path.join(homeDir, ".context", ".contextignore");
       return await this.loadIgnoreFile(
         globalIgnorePath,
         "global .contextignore",
       );
-    } catch (_error) {
+    } catch {
       // Global ignore file is optional, don't log warnings
       return [];
     }
@@ -1351,7 +1544,7 @@ export class Context {
         console.log(`📄 ${fileName} file found but no valid patterns detected`);
         return [];
       }
-    } catch (_error) {
+    } catch {
       if (fileName.includes("global")) {
         console.log(`📄 No ${fileName} file found`);
       }

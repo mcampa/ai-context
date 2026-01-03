@@ -1,18 +1,20 @@
-# @mcampa/claude-context-core
+# @mcampa/ai-context-core
 
 ![](../../assets/claude-context.png)
 
-The core indexing engine for Claude Context - a powerful tool for semantic search and analysis of codebases using vector embeddings and AI.
+The core indexing engine for Context Please - a powerful tool for semantic search and analysis of codebases using vector embeddings and AI.
 
-[![npm version](https://img.shields.io/npm/v/@mcampa/claude-context-core.svg)](https://www.npmjs.com/package/@mcampa/claude-context-core)
-[![npm downloads](https://img.shields.io/npm/dm/@mcampa/claude-context-core.svg)](https://www.npmjs.com/package/@mcampa/claude-context-core)
+> **Note:** This is a fork of [@zilliz/claude-context-core](https://www.npmjs.com/package/@zilliz/claude-context-core) by Zilliz, maintained by PleaseAI.
 
-> 📖 **New to Claude Context?** Check out the [main project README](../../README.md) for an overview and quick start guide.
+[![npm version](https://img.shields.io/npm/v/@mcampa/ai-context-core.svg)](https://www.npmjs.com/package/@mcampa/ai-context-core)
+[![npm downloads](https://img.shields.io/npm/dm/@mcampa/ai-context-core.svg)](https://www.npmjs.com/package/@mcampa/ai-context-core)
+
+> 📖 **New to Context Please?** Check out the [main project README](../../README.md) for an overview and quick start guide.
 
 ## Installation
 
 ```bash
-npm install @mcampa/claude-context-core
+npm install @mcampa/ai-context-core
 ```
 
 ### Prepare Environment Variables
@@ -33,7 +35,7 @@ Claude Context needs a vector database. You can [sign up](https://cloud.zilliz.c
 
 ![](../../assets/signup_and_create_cluster.jpeg)
 
-After creating your cluster, open your Zilliz Cloud console and copy both the **public endpoint** and your **API key**.  
+After creating your cluster, open your Zilliz Cloud console and copy both the **public endpoint** and your **API key**.
 These will be used as `your-zilliz-cloud-public-endpoint` and `your-zilliz-cloud-api-key` in the configuration examples.
 
 ![Zilliz Cloud Dashboard](../../assets/zilliz_cloud_dashboard.jpeg)
@@ -54,9 +56,9 @@ MILVUS_TOKEN=your-zilliz-cloud-api-key
 ```typescript
 import {
   Context,
-  OpenAIEmbedding,
   MilvusVectorDatabase,
-} from "@mcampa/claude-context-core";
+  OpenAIEmbedding,
+} from "@mcampa/ai-context-core";
 
 // Initialize embedding provider
 const embedding = new OpenAIEmbedding({
@@ -72,7 +74,6 @@ const vectorDatabase = new MilvusVectorDatabase({
 
 // Create context instance
 const context = new Context({
-  name: "my-context",
   embedding,
   vectorDatabase,
 });
@@ -88,6 +89,7 @@ console.log(
 
 // Search the codebase
 const results = await context.semanticSearch(
+  "./my-project",
   "function that handles user authentication",
   5,
 );
@@ -141,12 +143,6 @@ interface ContextConfig {
   customIgnorePatterns?: string[]; // Additional patterns to add to ignorePatterns
 }
 ```
-
-**Note on configuration behavior:**
-
-- If you provide `supportedExtensions`, it **replaces** the default extensions entirely
-- If you provide `ignorePatterns`, it **replaces** the default ignore patterns entirely
-- `customExtensions` and `customIgnorePatterns` are **added** to whatever base is used (defaults or your custom ones)
 
 ### Supported File Extensions (Default)
 
@@ -230,7 +226,7 @@ import {
   Context,
   MilvusVectorDatabase,
   VoyageAIEmbedding,
-} from "@mcampa/claude-context-core";
+} from "@mcampa/ai-context-core";
 
 // Initialize with VoyageAI embedding provider
 const embedding = new VoyageAIEmbedding({
@@ -244,54 +240,66 @@ const vectorDatabase = new MilvusVectorDatabase({
 });
 
 const context = new Context({
-  name: "my-context",
   embedding,
   vectorDatabase,
 });
+```
+
+### Using Gemini Embeddings with Retry Configuration
+
+```typescript
+import {
+  Context,
+  MilvusVectorDatabase,
+  GeminiEmbedding,
+} from "@mcampa/ai-context-core";
+
+// Initialize with Gemini embedding provider
+const embedding = new GeminiEmbedding({
+  apiKey: process.env.GEMINI_API_KEY || "your-gemini-api-key",
+  model: "gemini-embedding-001",
+  outputDimensionality: 768, // Optional: Matryoshka Representation Learning support (256, 768, 1536, 3072)
+  maxRetries: 3, // Optional: Maximum retry attempts (default: 3)
+  baseDelay: 1000, // Optional: Base delay in ms for exponential backoff (default: 1000ms)
+});
+
+const vectorDatabase = new MilvusVectorDatabase({
+  address: process.env.MILVUS_ADDRESS || "localhost:19530",
+  token: process.env.MILVUS_TOKEN || "",
+});
+
+const context = new Context({
+  embedding,
+  vectorDatabase,
+});
+
+// The retry mechanism automatically handles:
+// - Rate limit errors (429)
+// - Server errors (500, 502, 503, 504)
+// - Network errors (ECONNREFUSED, ETIMEDOUT, ENOTFOUND, EAI_AGAIN)
+// - Transient API failures with exponential backoff (1s → 2s → 4s → 8s, capped at 10s)
+
+// Update retry configuration at runtime
+embedding.setMaxRetries(5);
+embedding.setBaseDelay(2000);
+
+// Check current retry configuration
+const retryConfig = embedding.getRetryConfig();
+console.log(
+  `Max retries: ${retryConfig.maxRetries}, Base delay: ${retryConfig.baseDelay}ms`,
+);
 ```
 
 ### Custom File Filtering
 
 ```typescript
-// Replace default extensions and ignore patterns entirely
 const context = new Context({
-  name: "my-context",
   embedding,
   vectorDatabase,
-  supportedExtensions: [".ts", ".js", ".py", ".java"], // Only these extensions
-  ignorePatterns: ["node_modules/**", "dist/**", "*.spec.ts", "*.test.js"], // Only these patterns
-});
-
-// Or add to defaults using custom* properties
-const context2 = new Context({
-  name: "my-context",
-  embedding,
-  vectorDatabase,
-  customExtensions: [".vue", ".svelte"], // Adds to default extensions
-  customIgnorePatterns: ["*.spec.ts"], // Adds to default ignore patterns
+  supportedExtensions: [".ts", ".js", ".py", ".java"],
+  ignorePatterns: ["node_modules/**", "dist/**", "*.spec.ts", "*.test.js"],
 });
 ```
-
-### Relative Path Indexing
-
-File paths are indexed relative to the `codebasePath` parameter you provide when indexing:
-
-```typescript
-// Index a codebase - paths will be relative to this directory
-await context.indexCodebase("/Users/username/projects/my-workspace");
-
-// Search returns results with relative paths
-const results = await context.semanticSearch("user authentication function");
-
-// Results show paths relative to the indexed codebase path, e.g.:
-// "packages/app/src/auth.ts" instead of full absolute path
-```
-
-This makes search results:
-
-- More readable and concise
-- Portable across different machines
-- Consistent in monorepo environments
 
 ## File Synchronization Architecture
 

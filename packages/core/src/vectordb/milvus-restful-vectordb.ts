@@ -9,23 +9,20 @@
  * implementation uses only HTTP requests, making it compatible with them.
  */
 
-import {
-  VectorDocument,
-  SearchOptions,
-  VectorSearchResult,
-  VectorDatabase,
-  HybridSearchRequest,
+import type { BaseDatabaseConfig } from "./base/base-vector-database";
+import type {
   HybridSearchOptions,
+  HybridSearchRequest,
   HybridSearchResult,
-  COLLECTION_LIMIT_MESSAGE,
+  SearchOptions,
+  VectorDocument,
+  VectorSearchResult,
 } from "./types";
+import { BaseVectorDatabase } from "./base/base-vector-database";
+import { COLLECTION_LIMIT_MESSAGE } from "./types";
 import { ClusterManager } from "./zilliz-utils";
 
-export interface MilvusRestfulConfig {
-  address?: string;
-  token?: string;
-  username?: string;
-  password?: string;
+export interface MilvusRestfulConfig extends BaseDatabaseConfig {
   database?: string;
 }
 
@@ -85,19 +82,19 @@ async function createCollectionWithLimitCheck(
  * This implementation is designed for environments where gRPC is not available,
  * such as VSCode extensions or browser environments.
  */
-export class MilvusRestfulVectorDatabase implements VectorDatabase {
-  protected config: MilvusRestfulConfig;
+export class MilvusRestfulVectorDatabase extends BaseVectorDatabase<MilvusRestfulConfig> {
   private baseUrl: string | null = null;
-  protected initializationPromise: Promise<void>;
 
   constructor(config: MilvusRestfulConfig) {
-    this.config = config;
-
-    // Start initialization asynchronously without waiting
-    this.initializationPromise = this.initialize();
+    super(config);
   }
 
-  private async initialize(): Promise<void> {
+  /**
+   * @override
+   * Implements the abstract initialize method from BaseVectorDatabase.
+   * Initializes the Milvus RESTful client by resolving the address and setting up the connection.
+   */
+  protected async initialize(): Promise<void> {
     const resolvedAddress = await this.resolveAddress();
     await this.initializeClient(resolvedAddress);
   }
@@ -112,7 +109,7 @@ export class MilvusRestfulVectorDatabase implements VectorDatabase {
       processedAddress = `http://${processedAddress}`;
     }
 
-    this.baseUrl = processedAddress.replace(/\/$/, "") + "/v2/vectordb";
+    this.baseUrl = `${processedAddress.replace(/\/$/, "")}/v2/vectordb`;
 
     console.log(`🔌 Connecting to Milvus REST API at: ${processedAddress}`);
   }
@@ -141,10 +138,10 @@ export class MilvusRestfulVectorDatabase implements VectorDatabase {
   }
 
   /**
-   * Ensure initialization is complete before method execution
+   * Override to add baseUrl null check
    */
-  protected async ensureInitialized(): Promise<void> {
-    await this.initializationPromise;
+  protected override async ensureInitialized(): Promise<void> {
+    await super.ensureInitialized();
     if (!this.baseUrl) {
       throw new Error("Base URL not initialized");
     }
@@ -186,11 +183,11 @@ export class MilvusRestfulVectorDatabase implements VectorDatabase {
   /**
    * Make HTTP request to Milvus REST API
    */
-  private async makeRequest(
+  private async makeRequest<T>(
     endpoint: string,
     method: "GET" | "POST" = "POST",
     data?: Record<string, unknown>,
-  ): Promise<MilvusRestResponse> {
+  ): Promise<MilvusRestResponse<T>> {
     const url = `${this.baseUrl}${endpoint}`;
 
     const headers: Record<string, string> = {
@@ -200,10 +197,9 @@ export class MilvusRestfulVectorDatabase implements VectorDatabase {
 
     // Handle authentication
     if (this.config.token) {
-      headers["Authorization"] = `Bearer ${this.config.token}`;
+      headers.Authorization = `Bearer ${this.config.token}`;
     } else if (this.config.username && this.config.password) {
-      headers["Authorization"] =
-        `Bearer ${this.config.username}:${this.config.password}`;
+      headers.Authorization = `Bearer ${this.config.username}:${this.config.password}`;
     }
 
     const requestOptions: RequestInit = {
@@ -222,7 +218,7 @@ export class MilvusRestfulVectorDatabase implements VectorDatabase {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
-      const result = (await response.json()) as MilvusRestResponse;
+      const result = (await response.json()) as MilvusRestResponse<T>;
 
       if (result.code !== 0 && result.code !== 200) {
         throw new Error(
@@ -401,13 +397,16 @@ export class MilvusRestfulVectorDatabase implements VectorDatabase {
 
     try {
       const restfulConfig = this.config as MilvusRestfulConfig;
-      const response = await this.makeRequest("/collections/has", "POST", {
-        collectionName,
-        dbName: restfulConfig.database,
-      });
+      const response = await this.makeRequest<{ has?: boolean }>(
+        "/collections/has",
+        "POST",
+        {
+          collectionName,
+          dbName: restfulConfig.database,
+        },
+      );
 
-      const responseData = response.data as { has?: boolean } | undefined;
-      const exists = responseData?.has || false;
+      const exists = response.data?.has || false;
       return exists;
     } catch (error) {
       console.error(
@@ -423,12 +422,15 @@ export class MilvusRestfulVectorDatabase implements VectorDatabase {
 
     try {
       const restfulConfig = this.config as MilvusRestfulConfig;
-      const response = await this.makeRequest("/collections/list", "POST", {
-        dbName: restfulConfig.database,
-      });
+      const response = await this.makeRequest<string[]>(
+        "/collections/list",
+        "POST",
+        {
+          dbName: restfulConfig.database,
+        },
+      );
 
-      const collections = response.data as string[] | undefined;
-      return collections || [];
+      return response.data || [];
     } catch (error) {
       console.error(`[MilvusRestfulDB] ❌ Failed to list collections:`, error);
       throw error;
@@ -485,16 +487,7 @@ export class MilvusRestfulVectorDatabase implements VectorDatabase {
     try {
       const restfulConfig = this.config as MilvusRestfulConfig;
       // Build search request according to Milvus REST API specification
-      const searchRequest: {
-        collectionName: string;
-        dbName?: string;
-        data: number[][];
-        annsField: string;
-        limit: number;
-        outputFields: string[];
-        searchParams: { metricType: string; params: Record<string, unknown> };
-        filter?: string;
-      } = {
+      const searchRequest: any = {
         collectionName,
         dbName: restfulConfig.database,
         data: [queryVector], // Array of query vectors
@@ -522,7 +515,7 @@ export class MilvusRestfulVectorDatabase implements VectorDatabase {
       const response = await this.makeRequest(
         "/entities/search",
         "POST",
-        searchRequest as unknown as Record<string, unknown>,
+        searchRequest,
       );
 
       // Transform response to VectorSearchResult format
@@ -549,7 +542,7 @@ export class MilvusRestfulVectorDatabase implements VectorDatabase {
             startLine: item.startLine || 0,
             endLine: item.endLine || 0,
             fileExtension: item.fileExtension || "",
-            metadata: metadata,
+            metadata,
           },
           score: item.distance || 0,
         };
@@ -803,7 +796,7 @@ export class MilvusRestfulVectorDatabase implements VectorDatabase {
       const insertRequest = {
         collectionName,
         dbName: restfulConfig.database,
-        data: data,
+        data,
       };
 
       const response = await this.makeRequest(
@@ -843,35 +836,31 @@ export class MilvusRestfulVectorDatabase implements VectorDatabase {
 
       // Prepare search requests according to Milvus REST API hybrid search specification
       // For dense vector search - data must be array of vectors: [[0.1, 0.2, 0.3, ...]]
-      const denseData = searchRequests[0].data;
-      const search_param_1 = {
-        data: Array.isArray(denseData) ? [denseData] : [[denseData]],
+      const search_param_1: any = {
+        data: Array.isArray(searchRequests[0].data)
+          ? [searchRequests[0].data]
+          : [[searchRequests[0].data]],
         annsField: searchRequests[0].anns_field, // "vector"
         limit: searchRequests[0].limit,
         outputFields: ["*"],
         searchParams: {
           metricType: "COSINE",
-          params: (searchRequests[0].param as Record<string, unknown>) || {
-            nprobe: 10,
-          },
+          params: searchRequests[0].param || { nprobe: 10 },
         },
-        filter: undefined as string | undefined,
       };
 
       // For sparse vector search - data must be array of queries: ["query text"]
-      const sparseData = searchRequests[1].data;
-      const search_param_2 = {
-        data: typeof sparseData === "string" ? [sparseData] : sparseData,
+      const search_param_2: any = {
+        data: Array.isArray(searchRequests[1].data)
+          ? searchRequests[1].data
+          : [searchRequests[1].data],
         annsField: searchRequests[1].anns_field, // "sparse_vector"
         limit: searchRequests[1].limit,
         outputFields: ["*"],
         searchParams: {
           metricType: "BM25",
-          params: (searchRequests[1].param as Record<string, unknown>) || {
-            drop_ratio_search: 0.2,
-          },
+          params: searchRequests[1].param || { drop_ratio_search: 0.2 },
         },
-        filter: undefined as string | undefined,
       };
 
       // Apply filter to both search parameters if provided
@@ -910,7 +899,7 @@ export class MilvusRestfulVectorDatabase implements VectorDatabase {
             limit: search_param_2.limit,
             query_text:
               typeof search_param_2.data[0] === "string"
-                ? search_param_2.data[0].substring(0, 50) + "..."
+                ? `${search_param_2.data[0].substring(0, 50)}...`
                 : "N/A",
             searchParams: search_param_2.searchParams,
           },
@@ -919,7 +908,7 @@ export class MilvusRestfulVectorDatabase implements VectorDatabase {
         ),
       );
 
-      const hybridSearchRequest = {
+      const hybridSearchRequest: Record<string, unknown> = {
         collectionName,
         dbName: restfulConfig.database,
         search: [search_param_1, search_param_2],
@@ -940,7 +929,7 @@ export class MilvusRestfulVectorDatabase implements VectorDatabase {
       const response = await this.makeRequest(
         "/entities/hybrid_search",
         "POST",
-        hybridSearchRequest as unknown as Record<string, unknown>,
+        hybridSearchRequest,
       );
 
       if (response.code !== 0) {
@@ -957,9 +946,10 @@ export class MilvusRestfulVectorDatabase implements VectorDatabase {
       // Transform response to HybridSearchResult format
       return results.map((result) => ({
         document: {
-          id: result.id || "",
+          id: result.id,
           content: result.content || "",
-          vector: [],
+          vector: [], // Vector not returned in search results
+          sparse_vector: [], // Vector not returned in search results
           relativePath: result.relativePath || "",
           startLine: result.startLine || 0,
           endLine: result.endLine || 0,

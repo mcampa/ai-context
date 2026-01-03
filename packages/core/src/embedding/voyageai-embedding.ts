@@ -1,5 +1,6 @@
+import type { EmbeddingVector } from "./base-embedding";
 import { VoyageAIClient } from "voyageai";
-import { Embedding, EmbeddingVector } from "./base-embedding";
+import { Embedding } from "./base-embedding";
 
 export interface VoyageAIEmbeddingConfig {
   model: string;
@@ -72,7 +73,7 @@ export class VoyageAIEmbedding extends Embedding {
 
     const response = await this.client.embed({
       input: processedText,
-      model: model,
+      model,
       inputType: this.inputType,
     });
 
@@ -92,7 +93,7 @@ export class VoyageAIEmbedding extends Embedding {
 
     const response = await this.client.embed({
       input: processedTexts,
-      model: model,
+      model,
       inputType: this.inputType,
     });
 

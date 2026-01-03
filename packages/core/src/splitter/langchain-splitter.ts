@@ -1,5 +1,5 @@
+import type { CodeChunk, Splitter } from "./index";
 import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
-import { Splitter, CodeChunk } from "./index";
 
 // Define LangChain supported language types
 type SupportedLanguage =
@@ -50,7 +50,7 @@ export class LangChainCodeSplitter implements Splitter {
         const documents = await splitter.createDocuments([code]);
 
         // Convert to CodeChunk format
-        return documents.map((doc, _index) => {
+        return documents.map((doc) => {
           const lines = doc.metadata?.loc?.lines || { from: 1, to: 1 };
           return {
             content: doc.pageContent,
@@ -122,7 +122,7 @@ export class LangChainCodeSplitter implements Splitter {
 
     const documents = await splitter.createDocuments([code]);
 
-    return documents.map((doc, _index) => {
+    return documents.map((doc) => {
       const lines = this.estimateLines(doc.pageContent, code);
       return {
         content: doc.pageContent,

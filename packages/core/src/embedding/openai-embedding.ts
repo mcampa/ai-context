@@ -1,5 +1,6 @@
+import type { EmbeddingVector } from "./base-embedding";
 import OpenAI from "openai";
-import { Embedding, EmbeddingVector } from "./base-embedding";
+import { Embedding } from "./base-embedding";
 
 export interface OpenAIEmbeddingConfig {
   model: string;
@@ -35,7 +36,7 @@ export class OpenAIEmbedding extends Embedding {
     try {
       const processedText = this.preprocessText(testText);
       const response = await this.client.embeddings.create({
-        model: model,
+        model,
         input: processedText,
         encoding_format: "float",
       });
@@ -75,7 +76,7 @@ export class OpenAIEmbedding extends Embedding {
 
     try {
       const response = await this.client.embeddings.create({
-        model: model,
+        model,
         input: processedText,
         encoding_format: "float",
       });
@@ -107,7 +108,7 @@ export class OpenAIEmbedding extends Embedding {
 
     try {
       const response = await this.client.embeddings.create({
-        model: model,
+        model,
         input: processedTexts,
         encoding_format: "float",
       });

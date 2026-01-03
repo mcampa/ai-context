@@ -1,5 +1,7 @@
-import { EmbedRequest, Ollama } from "ollama";
-import { Embedding, EmbeddingVector } from "./base-embedding";
+import type { EmbedRequest } from "ollama";
+import type { EmbeddingVector } from "./base-embedding";
+import { Ollama } from "ollama";
+import { Embedding } from "./base-embedding";
 
 export interface OllamaEmbeddingConfig {
   model: string;
@@ -154,8 +156,7 @@ export class OllamaEmbedding extends Embedding {
       );
     } else {
       console.log(
-        "[OllamaEmbedding] Dimension already detected for model " +
-          this.config.model,
+        `[OllamaEmbedding] Dimension already detected for model ${this.config.model}`,
       );
     }
   }
@@ -167,7 +168,7 @@ export class OllamaEmbedding extends Embedding {
   setHost(host: string): void {
     this.config.host = host;
     this.client = new Ollama({
-      host: host,
+      host,
       fetch: this.config.fetch,
     });
   }
