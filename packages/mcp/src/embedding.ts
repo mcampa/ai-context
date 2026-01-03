@@ -1,15 +1,21 @@
 import {
+  GeminiEmbedding,
+  HuggingFaceEmbedding,
+  OllamaEmbedding,
   OpenAIEmbedding,
   VoyageAIEmbedding,
-  GeminiEmbedding,
-  OllamaEmbedding,
 } from "@mcampa/ai-context-core";
 import { ContextMcpConfig } from "./config.js";
 
 // Helper function to create embedding instance based on provider
 export function createEmbeddingInstance(
   config: ContextMcpConfig,
-): OpenAIEmbedding | VoyageAIEmbedding | GeminiEmbedding | OllamaEmbedding {
+):
+  | OpenAIEmbedding
+  | VoyageAIEmbedding
+  | GeminiEmbedding
+  | OllamaEmbedding
+  | HuggingFaceEmbedding {
   console.log(
     `[EMBEDDING] Creating ${config.embeddingProvider} embedding instance...`,
   );
@@ -37,7 +43,6 @@ export function createEmbeddingInstance(
       );
       return openaiEmbedding;
     }
-
     case "VoyageAI": {
       if (!config.voyageaiApiKey) {
         console.error(
@@ -59,7 +64,6 @@ export function createEmbeddingInstance(
       );
       return voyageEmbedding;
     }
-
     case "Gemini": {
       if (!config.geminiApiKey) {
         console.error(
@@ -82,7 +86,6 @@ export function createEmbeddingInstance(
       );
       return geminiEmbedding;
     }
-
     case "Ollama": {
       const ollamaHost = config.ollamaHost || "http://127.0.0.1:11434";
       console.log(
@@ -97,14 +100,27 @@ export function createEmbeddingInstance(
       );
       return ollamaEmbedding;
     }
-
-    default:
+    case "HuggingFace": {
+      console.log(
+        `[EMBEDDING] 🔧 Configuring HuggingFace with model: ${config.embeddingModel}, dtype: ${config.huggingfaceDtype || "fp32"}`,
+      );
+      const huggingfaceEmbedding = new HuggingFaceEmbedding({
+        model: config.embeddingModel,
+        dtype: config.huggingfaceDtype,
+      });
+      console.log(
+        `[EMBEDDING] ✅ HuggingFace embedding instance created successfully`,
+      );
+      return huggingfaceEmbedding;
+    }
+    default: {
       console.error(
         `[EMBEDDING] ❌ Unsupported embedding provider: ${config.embeddingProvider}`,
       );
       throw new Error(
         `Unsupported embedding provider: ${config.embeddingProvider}`,
       );
+    }
   }
 }
 
@@ -114,45 +130,41 @@ export function logEmbeddingProviderInfo(
     | OpenAIEmbedding
     | VoyageAIEmbedding
     | GeminiEmbedding
-    | OllamaEmbedding,
+    | OllamaEmbedding
+    | HuggingFaceEmbedding,
 ): void {
   console.log(
     `[EMBEDDING] ✅ Successfully initialized ${config.embeddingProvider} embedding provider`,
   );
   console.log(
-    `[EMBEDDING] Provider details - Model: ${
-      config.embeddingModel
-    }, Dimension: ${embedding.getDimension()}`,
+    `[EMBEDDING] Provider details - Model: ${config.embeddingModel}, Dimension: ${embedding.getDimension()}`,
   );
 
   // Log provider-specific configuration details
   switch (config.embeddingProvider) {
     case "OpenAI":
       console.log(
-        `[EMBEDDING] OpenAI configuration - API Key: ${
-          config.openaiApiKey ? "✅ Provided" : "❌ Missing"
-        }, Base URL: ${config.openaiBaseUrl || "Default"}`,
+        `[EMBEDDING] OpenAI configuration - API Key: ${config.openaiApiKey ? "✅ Provided" : "❌ Missing"}, Base URL: ${config.openaiBaseUrl || "Default"}`,
       );
       break;
     case "VoyageAI":
       console.log(
-        `[EMBEDDING] VoyageAI configuration - API Key: ${
-          config.voyageaiApiKey ? "✅ Provided" : "❌ Missing"
-        }`,
+        `[EMBEDDING] VoyageAI configuration - API Key: ${config.voyageaiApiKey ? "✅ Provided" : "❌ Missing"}`,
       );
       break;
     case "Gemini":
       console.log(
-        `[EMBEDDING] Gemini configuration - API Key: ${
-          config.geminiApiKey ? "✅ Provided" : "❌ Missing"
-        }, Base URL: ${config.geminiBaseUrl || "Default"}`,
+        `[EMBEDDING] Gemini configuration - API Key: ${config.geminiApiKey ? "✅ Provided" : "❌ Missing"}, Base URL: ${config.geminiBaseUrl || "Default"}`,
       );
       break;
     case "Ollama":
       console.log(
-        `[EMBEDDING] Ollama configuration - Host: ${
-          config.ollamaHost || "http://127.0.0.1:11434"
-        }, Model: ${config.embeddingModel}`,
+        `[EMBEDDING] Ollama configuration - Host: ${config.ollamaHost || "http://127.0.0.1:11434"}, Model: ${config.embeddingModel}`,
+      );
+      break;
+    case "HuggingFace":
+      console.log(
+        `[EMBEDDING] HuggingFace configuration - Model: ${config.embeddingModel}, Dtype: ${config.huggingfaceDtype || "fp32"}`,
       );
       break;
   }

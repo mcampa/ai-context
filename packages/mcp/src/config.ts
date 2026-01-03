@@ -4,7 +4,12 @@ export interface ContextMcpConfig {
   name: string;
   version: string;
   // Embedding provider configuration
-  embeddingProvider: "OpenAI" | "VoyageAI" | "Gemini" | "Ollama";
+  embeddingProvider:
+    | "OpenAI"
+    | "VoyageAI"
+    | "Gemini"
+    | "Ollama"
+    | "HuggingFace";
   embeddingModel: string;
   // Provider-specific API keys
   openaiApiKey?: string;
@@ -15,9 +20,14 @@ export interface ContextMcpConfig {
   // Ollama configuration
   ollamaModel?: string;
   ollamaHost?: string;
+  // HuggingFace configuration
+  huggingfaceDtype?: "fp32" | "fp16" | "q8" | "q4" | "q4f16";
   // Vector database configuration
+  vectorDbType?: "milvus" | "qdrant" | "faiss-local" | "libsql"; // Vector database type (default: faiss-local for local dev)
   milvusAddress?: string; // Optional, can be auto-resolved from token
   milvusToken?: string;
+  qdrantUrl?: string; // Qdrant URL (e.g., http://localhost:6333 or cloud URL)
+  qdrantApiKey?: string; // Qdrant API key (optional for self-hosted)
 }
 
 // Legacy format (v1) - for backward compatibility
@@ -81,6 +91,8 @@ export function getDefaultModelForProvider(provider: string): string {
       return "gemini-embedding-001";
     case "Ollama":
       return "nomic-embed-text";
+    case "HuggingFace":
+      return "MongoDB/mdbr-leaf-ir";
     default:
       return "text-embedding-3-small";
   }
@@ -96,13 +108,19 @@ export function getEmbeddingModelForProvider(provider: string): string {
         envManager.get("EMBEDDING_MODEL") ||
         getDefaultModelForProvider(provider);
       console.log(
-        `[DEBUG] 🎯 Ollama model selection: OLLAMA_MODEL=${
-          envManager.get("OLLAMA_MODEL") || "NOT SET"
-        }, EMBEDDING_MODEL=${
-          envManager.get("EMBEDDING_MODEL") || "NOT SET"
-        }, selected=${ollamaModel}`,
+        `[DEBUG] 🎯 Ollama model selection: OLLAMA_MODEL=${envManager.get("OLLAMA_MODEL") || "NOT SET"}, EMBEDDING_MODEL=${envManager.get("EMBEDDING_MODEL") || "NOT SET"}, selected=${ollamaModel}`,
       );
       return ollamaModel;
+    }
+    case "HuggingFace": {
+      // For HuggingFace, use EMBEDDING_MODEL or default LEAF model
+      const hfModel =
+        envManager.get("EMBEDDING_MODEL") ||
+        getDefaultModelForProvider(provider);
+      console.log(
+        `[DEBUG] 🎯 HuggingFace model selection: EMBEDDING_MODEL=${envManager.get("EMBEDDING_MODEL") || "NOT SET"}, selected=${hfModel}`,
+      );
+      return hfModel;
     }
     case "OpenAI":
     case "VoyageAI":
@@ -113,9 +131,7 @@ export function getEmbeddingModelForProvider(provider: string): string {
         envManager.get("EMBEDDING_MODEL") ||
         getDefaultModelForProvider(provider);
       console.log(
-        `[DEBUG] 🎯 ${provider} model selection: EMBEDDING_MODEL=${
-          envManager.get("EMBEDDING_MODEL") || "NOT SET"
-        }, selected=${selectedModel}`,
+        `[DEBUG] 🎯 ${provider} model selection: EMBEDDING_MODEL=${envManager.get("EMBEDDING_MODEL") || "NOT SET"}, selected=${selectedModel}`,
       );
       return selectedModel;
     }
@@ -126,34 +142,31 @@ export function createMcpConfig(): ContextMcpConfig {
   // Debug: Print all environment variables related to Context
   console.log(`[DEBUG] 🔍 Environment Variables Debug:`);
   console.log(
-    `[DEBUG]   EMBEDDING_PROVIDER: ${
-      envManager.get("EMBEDDING_PROVIDER") || "NOT SET"
-    }`,
+    `[DEBUG]   EMBEDDING_PROVIDER: ${envManager.get("EMBEDDING_PROVIDER") || "NOT SET"}`,
   );
   console.log(
-    `[DEBUG]   EMBEDDING_MODEL: ${
-      envManager.get("EMBEDDING_MODEL") || "NOT SET"
-    }`,
+    `[DEBUG]   EMBEDDING_MODEL: ${envManager.get("EMBEDDING_MODEL") || "NOT SET"}`,
   );
   console.log(
     `[DEBUG]   OLLAMA_MODEL: ${envManager.get("OLLAMA_MODEL") || "NOT SET"}`,
   );
   console.log(
-    `[DEBUG]   GEMINI_API_KEY: ${
-      envManager.get("GEMINI_API_KEY")
-        ? "SET (length: " + envManager.get("GEMINI_API_KEY")!.length + ")"
-        : "NOT SET"
-    }`,
+    `[DEBUG]   GEMINI_API_KEY: ${envManager.get("GEMINI_API_KEY") ? `SET (length: ${envManager.get("GEMINI_API_KEY")!.length})` : "NOT SET"}`,
   );
   console.log(
-    `[DEBUG]   OPENAI_API_KEY: ${
-      envManager.get("OPENAI_API_KEY")
-        ? "SET (length: " + envManager.get("OPENAI_API_KEY")!.length + ")"
-        : "NOT SET"
-    }`,
+    `[DEBUG]   OPENAI_API_KEY: ${envManager.get("OPENAI_API_KEY") ? `SET (length: ${envManager.get("OPENAI_API_KEY")!.length})` : "NOT SET"}`,
+  );
+  console.log(
+    `[DEBUG]   HUGGINGFACE_DTYPE: ${envManager.get("HUGGINGFACE_DTYPE") || "NOT SET"}`,
+  );
+  console.log(
+    `[DEBUG]   VECTOR_DB_TYPE: ${envManager.get("VECTOR_DB_TYPE") || "NOT SET"}`,
   );
   console.log(
     `[DEBUG]   MILVUS_ADDRESS: ${envManager.get("MILVUS_ADDRESS") || "NOT SET"}`,
+  );
+  console.log(
+    `[DEBUG]   QDRANT_URL: ${envManager.get("QDRANT_URL") || "NOT SET"}`,
   );
   console.log(`[DEBUG]   NODE_ENV: ${envManager.get("NODE_ENV") || "NOT SET"}`);
 
@@ -166,9 +179,10 @@ export function createMcpConfig(): ContextMcpConfig {
         | "OpenAI"
         | "VoyageAI"
         | "Gemini"
-        | "Ollama") || "OpenAI",
+        | "Ollama"
+        | "HuggingFace") || "HuggingFace",
     embeddingModel: getEmbeddingModelForProvider(
-      envManager.get("EMBEDDING_PROVIDER") || "OpenAI",
+      envManager.get("EMBEDDING_PROVIDER") || "HuggingFace",
     ),
     // Provider-specific API keys
     openaiApiKey: envManager.get("OPENAI_API_KEY"),
@@ -179,9 +193,25 @@ export function createMcpConfig(): ContextMcpConfig {
     // Ollama configuration
     ollamaModel: envManager.get("OLLAMA_MODEL"),
     ollamaHost: envManager.get("OLLAMA_HOST"),
-    // Vector database configuration - address can be auto-resolved from token
+    // HuggingFace configuration
+    huggingfaceDtype:
+      (envManager.get("HUGGINGFACE_DTYPE") as
+        | "fp32"
+        | "fp16"
+        | "q8"
+        | "q4"
+        | "q4f16") || undefined,
+    // Vector database configuration
+    vectorDbType:
+      (envManager.get("VECTOR_DB_TYPE") as
+        | "milvus"
+        | "qdrant"
+        | "faiss-local"
+        | "libsql") || "faiss-local",
     milvusAddress: envManager.get("MILVUS_ADDRESS"), // Optional, can be resolved from token
     milvusToken: envManager.get("MILVUS_TOKEN"),
+    qdrantUrl: envManager.get("QDRANT_URL"),
+    qdrantApiKey: envManager.get("QDRANT_API_KEY"),
   };
 
   return config;
@@ -195,19 +225,36 @@ export function logConfigurationSummary(config: ContextMcpConfig): void {
   console.log(`[MCP]   Embedding Provider: ${config.embeddingProvider}`);
   console.log(`[MCP]   Embedding Model: ${config.embeddingModel}`);
   console.log(
-    `[MCP]   Milvus Address: ${
-      config.milvusAddress ||
-      (config.milvusToken ? "[Auto-resolve from token]" : "[Not configured]")
-    }`,
+    `[MCP]   Vector Database: ${config.vectorDbType || "faiss-local"}`,
   );
+
+  // Log vector database specific configuration
+  if (config.vectorDbType === "qdrant") {
+    console.log(
+      `[MCP]   Qdrant URL: ${config.qdrantUrl || "[Not configured]"}`,
+    );
+    console.log(
+      `[MCP]   Qdrant API Key: ${config.qdrantApiKey ? "✅ Configured" : "❌ Not configured"}`,
+    );
+  } else if (config.vectorDbType === "libsql") {
+    console.log(
+      `[MCP]   LibSQL Storage: ${process.env.LIBSQL_STORAGE_DIR || "~/.context/libsql-indexes"}`,
+    );
+  } else if (config.vectorDbType === "faiss-local") {
+    console.log(
+      `[MCP]   FAISS Storage: ${process.env.FAISS_STORAGE_DIR || "~/.context/faiss-indexes"}`,
+    );
+  } else {
+    console.log(
+      `[MCP]   Milvus Address: ${config.milvusAddress || (config.milvusToken ? "[Auto-resolve from token]" : "[Not configured]")}`,
+    );
+  }
 
   // Log provider-specific configuration without exposing sensitive data
   switch (config.embeddingProvider) {
     case "OpenAI":
       console.log(
-        `[MCP]   OpenAI API Key: ${
-          config.openaiApiKey ? "✅ Configured" : "❌ Missing"
-        }`,
+        `[MCP]   OpenAI API Key: ${config.openaiApiKey ? "✅ Configured" : "❌ Missing"}`,
       );
       if (config.openaiBaseUrl) {
         console.log(`[MCP]   OpenAI Base URL: ${config.openaiBaseUrl}`);
@@ -215,16 +262,12 @@ export function logConfigurationSummary(config: ContextMcpConfig): void {
       break;
     case "VoyageAI":
       console.log(
-        `[MCP]   VoyageAI API Key: ${
-          config.voyageaiApiKey ? "✅ Configured" : "❌ Missing"
-        }`,
+        `[MCP]   VoyageAI API Key: ${config.voyageaiApiKey ? "✅ Configured" : "❌ Missing"}`,
       );
       break;
     case "Gemini":
       console.log(
-        `[MCP]   Gemini API Key: ${
-          config.geminiApiKey ? "✅ Configured" : "❌ Missing"
-        }`,
+        `[MCP]   Gemini API Key: ${config.geminiApiKey ? "✅ Configured" : "❌ Missing"}`,
       );
       if (config.geminiBaseUrl) {
         console.log(`[MCP]   Gemini Base URL: ${config.geminiBaseUrl}`);
@@ -235,6 +278,12 @@ export function logConfigurationSummary(config: ContextMcpConfig): void {
         `[MCP]   Ollama Host: ${config.ollamaHost || "http://127.0.0.1:11434"}`,
       );
       console.log(`[MCP]   Ollama Model: ${config.embeddingModel}`);
+      break;
+    case "HuggingFace":
+      console.log(`[MCP]   HuggingFace Model: ${config.embeddingModel}`);
+      console.log(
+        `[MCP]   HuggingFace Dtype: ${config.huggingfaceDtype || "fp32"}`,
+      );
       break;
   }
 
@@ -253,9 +302,9 @@ Options:
 Environment Variables:
   MCP_SERVER_NAME         Server name
   MCP_SERVER_VERSION      Server version
-  
+
   Embedding Provider Configuration:
-  EMBEDDING_PROVIDER      Embedding provider: OpenAI, VoyageAI, Gemini, Ollama (default: OpenAI)
+  EMBEDDING_PROVIDER      Embedding provider: OpenAI, VoyageAI, Gemini, Ollama, HuggingFace (default: OpenAI)
   EMBEDDING_MODEL         Embedding model name (works for all providers)
   
   Provider-specific API Keys:
@@ -268,10 +317,17 @@ Environment Variables:
   Ollama Configuration:
   OLLAMA_HOST             Ollama server host (default: http://127.0.0.1:11434)
   OLLAMA_MODEL            Ollama model name (alternative to EMBEDDING_MODEL for Ollama)
-  
+
+  HuggingFace Configuration:
+  HUGGINGFACE_DTYPE       Model dtype: fp32, fp16, q8, q4, q4f16 (default: fp32)
+
   Vector Database Configuration:
+  VECTOR_DB_TYPE          Vector database type: faiss-local (default), milvus, qdrant, or libsql
   MILVUS_ADDRESS          Milvus address (optional, can be auto-resolved from token)
   MILVUS_TOKEN            Milvus token (optional, used for authentication and address resolution)
+  QDRANT_URL              Qdrant URL (e.g., http://localhost:6333 or cloud URL)
+  QDRANT_API_KEY          Qdrant API key (optional for self-hosted)
+  LIBSQL_STORAGE_DIR      LibSQL storage directory (default: ~/.context/libsql-indexes)
 
 Examples:
   # Start MCP server with OpenAI (default) and explicit Milvus address
@@ -291,5 +347,20 @@ Examples:
   
   # Start MCP server with Ollama and specific model (using EMBEDDING_MODEL)
   EMBEDDING_PROVIDER=Ollama EMBEDDING_MODEL=nomic-embed-text MILVUS_TOKEN=your-token npx @mcampa/ai-context-mcp@latest
+
+  # Start MCP server with Qdrant (self-hosted)
+  OPENAI_API_KEY=sk-xxx VECTOR_DB_TYPE=qdrant QDRANT_URL=http://localhost:6333 npx @mcampa/ai-context-mcp@latest
+
+  # Start MCP server with Qdrant Cloud
+  OPENAI_API_KEY=sk-xxx VECTOR_DB_TYPE=qdrant QDRANT_URL=https://your-cluster.qdrant.io QDRANT_API_KEY=your-api-key npx @mcampa/ai-context-mcp@latest
+
+  # Start MCP server with HuggingFace LEAF model (local inference, no API key needed)
+  EMBEDDING_PROVIDER=HuggingFace EMBEDDING_MODEL=MongoDB/mdbr-leaf-ir MILVUS_TOKEN=your-token npx @mcampa/ai-context-mcp@latest
+
+  # Start MCP server with HuggingFace and quantized model for faster inference
+  EMBEDDING_PROVIDER=HuggingFace HUGGINGFACE_DTYPE=q8 MILVUS_TOKEN=your-token npx @mcampa/ai-context-mcp@latest
+
+  # Start MCP server with LibSQL (local, no external dependencies, pure JS)
+  EMBEDDING_PROVIDER=HuggingFace VECTOR_DB_TYPE=libsql npx @mcampa/ai-context-mcp@latest
         `);
 }

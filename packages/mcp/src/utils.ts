@@ -1,4 +1,4 @@
-import * as path from "path";
+import * as path from "node:path";
 
 /**
  * Truncate content to specified length
@@ -7,7 +7,7 @@ export function truncateContent(content: string, maxLength: number): string {
   if (content.length <= maxLength) {
     return content;
   }
-  return content.substring(0, maxLength) + "...";
+  return `${content.substring(0, maxLength)}...`;
 }
 
 /**

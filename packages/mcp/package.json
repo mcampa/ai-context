@@ -1,18 +1,34 @@
 {
   "name": "@mcampa/ai-context-mcp",
   "version": "0.0.2",
-  "description": "Model Context Protocol integration for Claude Context",
+  "description": "Model Context Protocol integration for AI Context",
   "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mcampa/ai-context.git",
+    "directory": "packages/mcp"
+  },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": "dist/index.js",
+  "files": [
+    "README.md",
+    "dist"
+  ],
   "scripts": {
     "build": "pnpm clean && tsc --build --force",
     "dev": "tsx --watch src/index.ts",
     "clean": "rimraf dist",
-    "lint": "eslint src",
-    "lint:fix": "eslint src --fix",
-    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:unit": "vitest run --config vitest.config.ts",
+    "test:integration": "vitest run --config vitest.config.integration.ts",
+    "test:all": "pnpm test:unit && pnpm test:integration",
     "start": "tsx src/index.ts",
     "start:with-env": "OPENAI_API_KEY=${OPENAI_API_KEY:your-api-key-here} MILVUS_ADDRESS=${MILVUS_ADDRESS:localhost:19530} tsx src/index.ts",
     "prepublishOnly": "pnpm build"
@@ -24,19 +40,12 @@
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "@vitest/coverage-v8": "^2.1.8",
+    "memfs": "^4.14.0",
     "tsx": "^4.19.4",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "vitest": "^2.1.8"
   },
-  "files": [
-    "dist",
-    "README.md"
-  ],
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/mcampa/ai-context.git",
-    "directory": "packages/mcp"
-  },
-  "license": "MIT",
   "publishConfig": {
     "access": "public"
   }

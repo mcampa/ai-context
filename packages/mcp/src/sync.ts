@@ -1,4 +1,4 @@
-import * as fs from "fs";
+import * as fs from "node:fs";
 import { Context, FileSynchronizer } from "@mcampa/ai-context-core";
 import { SnapshotManager } from "./snapshot.js";
 
@@ -48,9 +48,7 @@ export class SyncManager {
         const codebaseStartTime = Date.now();
 
         console.log(
-          `[SYNC-DEBUG] [${i + 1}/${
-            indexedCodebases.length
-          }] Starting sync for codebase: '${codebasePath}'`,
+          `[SYNC-DEBUG] [${i + 1}/${indexedCodebases.length}] Starting sync for codebase: '${codebasePath}'`,
         );
 
         // Check if codebase path still exists
@@ -64,7 +62,7 @@ export class SyncManager {
             );
             continue;
           }
-        } catch (pathError) {
+        } catch (pathError: any) {
           console.error(
             `[SYNC-DEBUG] Error checking codebase path '${codebasePath}':`,
             pathError,
@@ -101,28 +99,25 @@ export class SyncManager {
               `[SYNC] No changes detected for '${codebasePath}' (${codebaseElapsed}ms)`,
             );
           }
-        } catch (error) {
+        } catch (error: any) {
           const codebaseElapsed = Date.now() - codebaseStartTime;
           console.error(
             `[SYNC-DEBUG] Error syncing codebase '${codebasePath}' after ${codebaseElapsed}ms:`,
             error,
           );
-          if (error instanceof Error) {
-            console.error(`[SYNC-DEBUG] Error stack:`, error.stack);
-          }
+          console.error(`[SYNC-DEBUG] Error stack:`, error.stack);
 
-          if (String(error).includes("Failed to query Milvus")) {
+          if (error.message.includes("Failed to query Milvus")) {
             // Collection maybe deleted manually, delete the snapshot file
             await FileSynchronizer.deleteSnapshot(codebasePath);
           }
 
           // Log additional error details
-          const nodeError = error as NodeJS.ErrnoException;
-          if (nodeError.code) {
-            console.error(`[SYNC-DEBUG] Error code: ${nodeError.code}`);
+          if (error.code) {
+            console.error(`[SYNC-DEBUG] Error code: ${error.code}`);
           }
-          if (nodeError.errno) {
-            console.error(`[SYNC-DEBUG] Error errno: ${nodeError.errno}`);
+          if (error.errno) {
+            console.error(`[SYNC-DEBUG] Error errno: ${error.errno}`);
           }
 
           // Continue with next codebase even if one fails
@@ -139,15 +134,13 @@ export class SyncManager {
       console.log(
         `[SYNC] Index sync completed for all codebases. Total changes - Added: ${totalStats.added}, Removed: ${totalStats.removed}, Modified: ${totalStats.modified}`,
       );
-    } catch (error) {
+    } catch (error: any) {
       const totalElapsed = Date.now() - syncStartTime;
       console.error(
         `[SYNC-DEBUG] Error during index sync after ${totalElapsed}ms:`,
         error,
       );
-      if (error instanceof Error) {
-        console.error(`[SYNC-DEBUG] Error stack:`, error.stack);
-      }
+      console.error(`[SYNC-DEBUG] Error stack:`, error.stack);
     } finally {
       this.isSyncing = false;
       const totalElapsed = Date.now() - syncStartTime;
@@ -174,11 +167,11 @@ export class SyncManager {
             "[SYNC-DEBUG] Collection not yet established, this is expected for new cluster users. Will retry on next sync cycle.",
           );
         } else {
+          // Don't throw - errors in setTimeout callbacks are not catchable and would cause unhandled rejection
           console.error(
             "[SYNC-DEBUG] Initial sync failed with unexpected error:",
             error,
           );
-          throw error;
         }
       }
     }, 5000); // Initial sync after 5 seconds
@@ -190,7 +183,12 @@ export class SyncManager {
     const syncInterval = setInterval(
       () => {
         console.log("[SYNC-DEBUG] Executing scheduled periodic sync");
-        this.handleSyncIndex();
+        this.handleSyncIndex().catch((error) => {
+          console.error(
+            "[SYNC-DEBUG] Periodic sync failed:",
+            error instanceof Error ? error.message : error,
+          );
+        });
       },
       5 * 60 * 1000,
     ); // every 5 minutes

@@ -118,7 +118,7 @@ And then you can start Claude Code with `claude --debug` to see the MCP server l
 
 Use all three MCP tools:
 
-- `index_codebase` - Index sample repositories with optional custom ignore patterns  
+- `index_codebase` - Index sample repositories with optional custom ignore patterns
   Example with ignore patterns: `{"path": "/repo/path", "ignorePatterns": ["static/**", "*.tmp"]}`
 - `search_code` - Search with various queries
 - `clear_index` - Clear and re-index

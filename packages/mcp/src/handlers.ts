@@ -1,15 +1,16 @@
-import * as fs from "fs";
-import * as path from "path";
+import * as crypto from "node:crypto";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import {
-  Context,
   COLLECTION_LIMIT_MESSAGE,
-  SemanticSearchResult,
+  Context,
+  type SemanticSearchResult,
 } from "@mcampa/ai-context-core";
 import { SnapshotManager } from "./snapshot.js";
 import {
   ensureAbsolutePath,
-  truncateContent,
   trackCodebasePath,
+  truncateContent,
 } from "./utils.js";
 
 // Handler argument types
@@ -37,33 +38,84 @@ interface GetIndexingStatusArgs {
 }
 
 export class ToolHandlers {
-  private context: Context;
+  private baseContext: Context;
+  private contextCache: Map<string, Context> = new Map();
   private snapshotManager: SnapshotManager;
   private indexingStats: { indexedFiles: number; totalChunks: number } | null =
     null;
   private currentWorkspace: string;
 
   constructor(context: Context, snapshotManager: SnapshotManager) {
-    this.context = context;
+    this.baseContext = context;
     this.snapshotManager = snapshotManager;
     this.currentWorkspace = process.cwd();
     console.log(`[WORKSPACE] Current workspace: ${this.currentWorkspace}`);
   }
 
   /**
-   * Sync indexed codebases from Zilliz Cloud collections
-   * This method fetches all collections from the vector database,
+   * Generate a consistent context name from a codebase path
+   */
+  private getContextNameForPath(codebasePath: string): string {
+    // Use a hash of the path to create a unique but consistent name
+    const hash = crypto
+      .createHash("sha256")
+      .update(codebasePath)
+      .digest("hex")
+      .substring(0, 16);
+    return `codebase_${hash}`;
+  }
+
+  /**
+   * Get or create a Context instance for a specific codebase path
+   */
+  private getContextForPath(codebasePath: string): Context {
+    if (this.contextCache.has(codebasePath)) {
+      return this.contextCache.get(codebasePath)!;
+    }
+
+    const contextName = this.getContextNameForPath(codebasePath);
+    const context = new Context({
+      name: contextName,
+      embedding: this.baseContext.getEmbedding(),
+      vectorDatabase: this.baseContext.getVectorDatabase(),
+    });
+
+    this.contextCache.set(codebasePath, context);
+    console.log(
+      `[CONTEXT] Created new context for ${codebasePath} with name: ${contextName}`,
+    );
+    return context;
+  }
+
+  /**
+   * Legacy getter for backward compatibility - returns the base context
+   */
+  private get context(): Context {
+    return this.baseContext;
+  }
+
+  /**
+   * Register an existing context for a specific codebase path.
+   * This is useful for testing when the context is created externally.
+   */
+  public registerContextForPath(codebasePath: string, context: Context): void {
+    this.contextCache.set(codebasePath, context);
+  }
+
+  /**
+   * Sync indexed codebases from vector database collections
+   * This method fetches all collections from the vector database (Milvus, Zilliz, or Qdrant),
    * gets the first document from each collection to extract codebasePath from metadata,
    * and updates the snapshot with discovered codebases.
    *
-   * Logic: Compare mcp-codebase-snapshot.json with zilliz cloud collections
+   * Logic: Compare mcp-codebase-snapshot.json with vector database collections
    * - If local snapshot has extra directories (not in cloud), remove them
    * - If local snapshot is missing directories (exist in cloud), ignore them
    */
   private async syncIndexedCodebasesFromCloud(): Promise<void> {
     try {
       console.log(
-        `[SYNC-CLOUD] 🔄 Syncing indexed codebases from Zilliz Cloud...`,
+        `[SYNC-CLOUD] 🔄 Syncing indexed codebases from vector database...`,
       );
 
       // Get all collections using the interface method
@@ -126,14 +178,17 @@ export class ToolHandlers {
 
           if (results && results.length > 0) {
             const firstResult = results[0];
-            const metadataStr = firstResult.metadata;
+            const metadataValue = firstResult.metadata;
 
-            if (metadataStr && typeof metadataStr === "string") {
+            if (metadataValue) {
               try {
-                const metadata = JSON.parse(metadataStr) as Record<
-                  string,
-                  unknown
-                >;
+                // Handle both string and object metadata
+                // query() method already parses JSON for Qdrant, returns object
+                // For Milvus, it might still be a string
+                const metadata =
+                  typeof metadataValue === "string"
+                    ? JSON.parse(metadataValue)
+                    : metadataValue;
                 const codebasePath = metadata.codebasePath;
 
                 if (codebasePath && typeof codebasePath === "string") {
@@ -165,9 +220,7 @@ export class ToolHandlers {
         } catch (collectionError) {
           console.warn(
             `[SYNC-CLOUD] ⚠️  Error checking collection ${collectionName}:`,
-            collectionError instanceof Error
-              ? collectionError.message
-              : String(collectionError),
+            String(collectionError),
           );
           // Continue with next collection
         }
@@ -187,9 +240,21 @@ export class ToolHandlers {
 
       let hasChanges = false;
 
+      // Get currently indexing codebases to avoid removing them during background indexing
+      const indexingCodebases = this.snapshotManager.getIndexingCodebases();
+
       // Remove local codebases that don't exist in cloud
+      // BUT skip codebases that are currently being indexed (their collections may be empty)
       for (const localCodebase of localCodebases) {
         if (!cloudCodebases.has(localCodebase)) {
+          // Skip if this codebase is currently being indexed
+          if (indexingCodebases.includes(localCodebase)) {
+            console.log(
+              `[SYNC-CLOUD] ⏭️  Skipping removal of ${localCodebase} (currently indexing)`,
+            );
+            continue;
+          }
+
           this.snapshotManager.removeIndexedCodebase(localCodebase);
           hasChanges = true;
           console.log(
@@ -294,10 +359,11 @@ export class ToolHandlers {
         };
       }
 
-      //Check if the snapshot and cloud index are in sync
+      // Check if the snapshot and cloud index are in sync
+      const contextForPath = this.getContextForPath(absolutePath);
       if (
         this.snapshotManager.getIndexedCodebases().includes(absolutePath) !==
-        (await this.context.hasIndex())
+        (await contextForPath.hasIndex())
       ) {
         console.warn(
           `[INDEX-VALIDATION] ❌ Snapshot and cloud index mismatch: ${absolutePath}`,
@@ -328,11 +394,11 @@ export class ToolHandlers {
           );
           this.snapshotManager.removeIndexedCodebase(absolutePath);
         }
-        if (await this.context.hasIndex()) {
+        if (await contextForPath.hasIndex()) {
           console.log(
             `[FORCE-REINDEX] 🔄 Clearing index for '${absolutePath}'`,
           );
-          await this.context.clearIndex(absolutePath);
+          await contextForPath.clearIndex(absolutePath);
         }
       }
 
@@ -375,11 +441,7 @@ export class ToolHandlers {
           content: [
             {
               type: "text",
-              text: `Error validating collection creation: ${
-                validationError instanceof Error
-                  ? validationError.message
-                  : String(validationError)
-              }`,
+              text: `Error validating collection creation: ${String(validationError)}`,
             },
           ],
           isError: true,
@@ -389,9 +451,7 @@ export class ToolHandlers {
       // Add custom extensions if provided
       if (customFileExtensions.length > 0) {
         console.log(
-          `[CUSTOM-EXTENSIONS] Adding ${
-            customFileExtensions.length
-          } custom extensions: ${customFileExtensions.join(", ")}`,
+          `[CUSTOM-EXTENSIONS] Adding ${customFileExtensions.length} custom extensions: ${customFileExtensions.join(", ")}`,
         );
         this.context.addCustomExtensions(customFileExtensions);
       }
@@ -399,9 +459,7 @@ export class ToolHandlers {
       // Add custom ignore patterns if provided (before loading file-based patterns)
       if (customIgnorePatterns.length > 0) {
         console.log(
-          `[IGNORE-PATTERNS] Adding ${
-            customIgnorePatterns.length
-          } custom ignore patterns: ${customIgnorePatterns.join(", ")}`,
+          `[IGNORE-PATTERNS] Adding ${customIgnorePatterns.length} custom ignore patterns: ${customIgnorePatterns.join(", ")}`,
         );
         this.context.addCustomIgnorePatterns(customIgnorePatterns);
       }
@@ -410,13 +468,11 @@ export class ToolHandlers {
       const currentStatus =
         this.snapshotManager.getCodebaseStatus(absolutePath);
       if (currentStatus === "indexfailed") {
-        const failedInfo = this.snapshotManager.getCodebaseInfo(absolutePath);
-        const errorMessage =
-          failedInfo?.status === "indexfailed"
-            ? failedInfo.errorMessage
-            : "Unknown error";
+        const failedInfo = this.snapshotManager.getCodebaseInfo(
+          absolutePath,
+        ) as any;
         console.log(
-          `[BACKGROUND-INDEX] Retrying indexing for previously failed codebase. Previous error: ${errorMessage}`,
+          `[BACKGROUND-INDEX] Retrying indexing for previously failed codebase. Previous error: ${failedInfo?.errorMessage || "Unknown error"}`,
         );
       }
 
@@ -437,16 +493,12 @@ export class ToolHandlers {
 
       const extensionInfo =
         customFileExtensions.length > 0
-          ? `\nUsing ${
-              customFileExtensions.length
-            } custom extensions: ${customFileExtensions.join(", ")}`
+          ? `\nUsing ${customFileExtensions.length} custom extensions: ${customFileExtensions.join(", ")}`
           : "";
 
       const ignoreInfo =
         customIgnorePatterns.length > 0
-          ? `\nUsing ${
-              customIgnorePatterns.length
-            } custom ignore patterns: ${customIgnorePatterns.join(", ")}`
+          ? `\nUsing ${customIgnorePatterns.length} custom ignore patterns: ${customIgnorePatterns.join(", ")}`
           : "";
 
       return {
@@ -515,9 +567,9 @@ export class ToolHandlers {
       await synchronizer.initialize();
 
       // Store synchronizer in the context (let context manage collection names)
-      await this.context.getPreparedCollection(absolutePath);
-      const collectionName = this.context.getCollectionName();
-      this.context.setSynchronizer(collectionName, synchronizer);
+      await contextForThisTask.getPreparedCollection(absolutePath);
+      const collectionName = contextForThisTask.getCollectionName();
+      contextForThisTask.setSynchronizer(collectionName, synchronizer);
       if (contextForThisTask !== this.context) {
         contextForThisTask.setSynchronizer(collectionName, synchronizer);
       }
@@ -552,9 +604,7 @@ export class ToolHandlers {
             this.snapshotManager.saveCodebaseSnapshot();
             lastSaveTime = currentTime;
             console.log(
-              `[BACKGROUND-INDEX] 💾 Saved progress snapshot at ${progress.percentage.toFixed(
-                1,
-              )}%`,
+              `[BACKGROUND-INDEX] 💾 Saved progress snapshot at ${progress.percentage.toFixed(1)}%`,
             );
           }
 
@@ -577,9 +627,7 @@ export class ToolHandlers {
       // Save snapshot after updating codebase lists
       this.snapshotManager.saveCodebaseSnapshot();
 
-      let message = `Background indexing completed for '${absolutePath}' using ${splitterType.toUpperCase()} splitter.\nIndexed ${
-        stats.indexedFiles
-      } files, ${stats.totalChunks} chunks.`;
+      let message = `Background indexing completed for '${absolutePath}' using ${splitterType.toUpperCase()} splitter.\nIndexed ${stats.indexedFiles} files, ${stats.totalChunks} chunks.`;
       if (stats.status === "limit_reached") {
         message += `\n⚠️  Warning: Indexing stopped because the chunk limit (450,000) was reached. The index may be incomplete.`;
       }
@@ -652,12 +700,117 @@ export class ToolHandlers {
       trackCodebasePath(absolutePath);
 
       // Check if this codebase is indexed or being indexed
-      const isIndexed = this.snapshotManager
+      // IMPORTANT: Check both snapshot AND actual vector database collection
+      // to handle cases where snapshot is out of sync with cloud state
+      const isIndexedInSnapshot = this.snapshotManager
         .getIndexedCodebases()
         .includes(absolutePath);
       const isIndexing = this.snapshotManager
         .getIndexingCodebases()
         .includes(absolutePath);
+      const searchContext = this.getContextForPath(absolutePath);
+      const hasVectorCollection = await searchContext.hasIndex();
+
+      // Recovery logic for out-of-sync state between snapshot and vector database
+      //
+      // This can occur when:
+      // 1. Snapshot file was manually deleted or corrupted
+      // 2. MCP server restarted before saving snapshot after indexing
+      // 3. Multiple MCP instances accessing the same vector database
+      // 4. User switched between different machines with shared cloud vector DB
+      //
+      // Strategy:
+      // - Detect: Collection exists in vector DB but snapshot doesn't know about it
+      // - Recover: Query vector DB for actual statistics and sync to snapshot
+      // - Result: User can search immediately without re-indexing
+      if (hasVectorCollection && !isIndexedInSnapshot && !isIndexing) {
+        console.log(
+          `[SEARCH] Collection exists for '${absolutePath}' but not in snapshot - syncing state`,
+        );
+
+        try {
+          // Try to retrieve actual statistics from vector database
+          // This queries the collection to count unique files and total chunks
+          const stats = await searchContext.getCollectionStats(absolutePath);
+
+          if (stats) {
+            console.log(
+              `[SEARCH] Retrieved actual stats from vector DB: ${stats.indexedFiles} files, ${stats.totalChunks} chunks`,
+            );
+            this.snapshotManager.setCodebaseIndexed(absolutePath, {
+              indexedFiles: stats.indexedFiles,
+              totalChunks: stats.totalChunks,
+              status: "completed",
+            });
+
+            // Save snapshot with error handling
+            try {
+              this.snapshotManager.saveCodebaseSnapshot();
+              console.log(
+                `[SEARCH] Successfully synced snapshot state for '${absolutePath}'`,
+              );
+            } catch (saveError) {
+              console.error(
+                `[SEARCH] Failed to save snapshot after sync: ${saveError}`,
+              );
+              // Continue with search since vector DB is the source of truth
+            }
+          } else {
+            // Collection exists but stats query returned null (expected errors like collection not loaded)
+            // Return error to user instead of using placeholder values
+            return {
+              content: [
+                {
+                  type: "text",
+                  text:
+                    `Error: Collection exists for '${absolutePath}' but statistics could not be retrieved from the vector database.\n\n` +
+                    `This may indicate:\n` +
+                    `  - Collection is not loaded or in an invalid state\n` +
+                    `  - Vector database connectivity issues\n` +
+                    `\n` +
+                    `Recommended actions:\n` +
+                    `  1. Try searching again in a moment\n` +
+                    `  2. If the problem persists, re-index the codebase:\n` +
+                    `     index_codebase(path='${absolutePath}', force=true)\n` +
+                    `  3. Check your vector database connection settings`,
+                },
+              ],
+              isError: true,
+            };
+          }
+        } catch (error) {
+          // Unexpected error from getCollectionStats (network failure, auth error, etc.)
+          console.error(
+            `[SEARCH] Failed to retrieve collection stats during recovery:`,
+            error,
+          );
+
+          return {
+            content: [
+              {
+                type: "text",
+                text:
+                  `Error: Failed to sync codebase '${absolutePath}' from vector database.\n\n` +
+                  `Error: ${error instanceof Error ? error.message : String(error)}\n\n` +
+                  `This may indicate:\n` +
+                  `  - Network connectivity issues with the vector database\n` +
+                  `  - Authentication or permission problems\n` +
+                  `  - Vector database service unavailable\n` +
+                  `\n` +
+                  `Recommended actions:\n` +
+                  `  1. Check your MILVUS_ADDRESS and MILVUS_TOKEN settings\n` +
+                  `  2. Verify network connectivity to the database\n` +
+                  `  3. Check the logs above for detailed error information\n` +
+                  `  4. Try re-indexing: index_codebase(path='${absolutePath}', force=true)`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+
+      // Use the combined check: either in snapshot OR has actual collection
+      const isIndexed = isIndexedInSnapshot || hasVectorCollection;
 
       if (!isIndexed && !isIndexing) {
         return {
@@ -693,12 +846,12 @@ export class ToolHandlers {
       );
 
       // Build filter expression from extensionFilter list
-      let filterExpr: string | undefined = undefined;
+      let filterExpr: string | undefined;
       if (Array.isArray(extensionFilter) && extensionFilter.length > 0) {
         const cleaned = extensionFilter
-          .filter((v): v is string => typeof v === "string")
-          .map((v) => v.trim())
-          .filter((v) => v.length > 0);
+          .filter((v: string) => typeof v === "string")
+          .map((v: string) => v.trim())
+          .filter((v: string) => v.length > 0);
         const invalid = cleaned.filter(
           (e: string) => !(e.startsWith(".") && e.length > 1 && !/\s/.test(e)),
         );
@@ -707,9 +860,7 @@ export class ToolHandlers {
             content: [
               {
                 type: "text",
-                text: `Error: Invalid file extensions in extensionFilter: ${JSON.stringify(
-                  invalid,
-                )}. Use proper extensions like '.ts', '.py'.`,
+                text: `Error: Invalid file extensions in extensionFilter: ${JSON.stringify(invalid)}. Use proper extensions like '.ts', '.py'.`,
               },
             ],
             isError: true,
@@ -720,7 +871,7 @@ export class ToolHandlers {
       }
 
       // Search in the specified codebase
-      const searchResults = await this.context.semanticSearch(
+      const searchResults = await searchContext.semanticSearch(
         query,
         Math.min(resultLimit, 50),
         0.3,
@@ -728,9 +879,7 @@ export class ToolHandlers {
       );
 
       console.log(
-        `[SEARCH] ✅ Search completed! Found ${
-          searchResults.length
-        } results using ${embeddingProvider.getProvider()} embeddings`,
+        `[SEARCH] ✅ Search completed! Found ${searchResults.length} results using ${embeddingProvider.getProvider()} embeddings`,
       );
 
       if (searchResults.length === 0) {
@@ -756,9 +905,7 @@ export class ToolHandlers {
           const codebaseInfo = path.basename(absolutePath);
 
           return (
-            `${index + 1}. Code snippet (${
-              result.language
-            }) [${codebaseInfo}]\n` +
+            `${index + 1}. Code snippet (${result.language}) [${codebaseInfo}]\n` +
             `   Location: ${location}\n` +
             `   Rank: ${index + 1}\n` +
             `   Context: \n\`\`\`${result.language}\n${context}\n\`\`\`\n`
@@ -821,6 +968,18 @@ export class ToolHandlers {
   public async handleClearIndex(args: ClearIndexArgs) {
     const { path: codebasePath } = args;
 
+    if (!codebasePath) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: "Error: Path is required for clear_index operation.",
+          },
+        ],
+        isError: true,
+      };
+    }
+
     if (
       this.snapshotManager.getIndexedCodebases().length === 0 &&
       this.snapshotManager.getIndexingCodebases().length === 0
@@ -832,18 +991,6 @@ export class ToolHandlers {
             text: "No codebases are currently indexed or being indexed.",
           },
         ],
-      };
-    }
-
-    if (!codebasePath) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: "Error: Path is required for clearing index.",
-          },
-        ],
-        isError: true,
       };
     }
 
@@ -1025,24 +1172,22 @@ export class ToolHandlers {
 
       switch (status) {
         case "indexed":
-          if (info && info.status === "indexed") {
+          if (info && "indexedFiles" in info) {
+            const indexedInfo = info;
             statusMessage = `✅ Codebase '${absolutePath}' is fully indexed and ready for search.`;
-            statusMessage += `\n📊 Statistics: ${info.indexedFiles} files, ${info.totalChunks} chunks`;
-            statusMessage += `\n📅 Status: ${info.indexStatus}`;
-            statusMessage += `\n🕐 Last updated: ${new Date(
-              info.lastUpdated,
-            ).toLocaleString()}`;
+            statusMessage += `\n📊 Statistics: ${indexedInfo.indexedFiles} files, ${indexedInfo.totalChunks} chunks`;
+            statusMessage += `\n📅 Status: ${indexedInfo.indexStatus}`;
+            statusMessage += `\n🕐 Last updated: ${new Date(indexedInfo.lastUpdated).toLocaleString()}`;
           } else {
             statusMessage = `✅ Codebase '${absolutePath}' is fully indexed and ready for search.`;
           }
           break;
 
         case "indexing":
-          if (info && info.status === "indexing") {
-            const progressPercentage = info.indexingPercentage || 0;
-            statusMessage = `🔄 Codebase '${absolutePath}' is currently being indexed. Progress: ${progressPercentage.toFixed(
-              1,
-            )}%`;
+          if (info && "indexingPercentage" in info) {
+            const indexingInfo = info;
+            const progressPercentage = indexingInfo.indexingPercentage || 0;
+            statusMessage = `🔄 Codebase '${absolutePath}' is currently being indexed. Progress: ${progressPercentage.toFixed(1)}%`;
 
             // Add more detailed status based on progress
             if (progressPercentage < 10) {
@@ -1051,26 +1196,21 @@ export class ToolHandlers {
               statusMessage +=
                 " (Processing files and generating embeddings...)";
             }
-            statusMessage += `\n🕐 Last updated: ${new Date(
-              info.lastUpdated,
-            ).toLocaleString()}`;
+            statusMessage += `\n🕐 Last updated: ${new Date(indexingInfo.lastUpdated).toLocaleString()}`;
           } else {
             statusMessage = `🔄 Codebase '${absolutePath}' is currently being indexed.`;
           }
           break;
 
         case "indexfailed":
-          if (info && info.status === "indexfailed") {
+          if (info && "errorMessage" in info) {
+            const failedInfo = info;
             statusMessage = `❌ Codebase '${absolutePath}' indexing failed.`;
-            statusMessage += `\n🚨 Error: ${info.errorMessage}`;
-            if (info.lastAttemptedPercentage !== undefined) {
-              statusMessage += `\n📊 Failed at: ${info.lastAttemptedPercentage.toFixed(
-                1,
-              )}% progress`;
+            statusMessage += `\n🚨 Error: ${failedInfo.errorMessage}`;
+            if (failedInfo.lastAttemptedPercentage !== undefined) {
+              statusMessage += `\n📊 Failed at: ${failedInfo.lastAttemptedPercentage.toFixed(1)}% progress`;
             }
-            statusMessage += `\n🕐 Failed at: ${new Date(
-              info.lastUpdated,
-            ).toLocaleString()}`;
+            statusMessage += `\n🕐 Failed at: ${new Date(failedInfo.lastUpdated).toLocaleString()}`;
             statusMessage += `\n💡 You can retry indexing by running the index_codebase command again.`;
           } else {
             statusMessage = `❌ Codebase '${absolutePath}' indexing failed. You can retry indexing.`;

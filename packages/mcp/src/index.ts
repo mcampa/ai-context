@@ -2,42 +2,49 @@
 
 // CRITICAL: Redirect console outputs to stderr IMMEDIATELY to avoid interfering with MCP JSON protocol
 // Only MCP protocol messages should go to stdout
-const _originalConsoleLog = console.log;
-const _originalConsoleWarn = console.warn;
-
-console.log = (...args: unknown[]) => {
-  process.stderr.write("[LOG] " + args.join(" ") + "\n");
-};
-
-console.warn = (...args: unknown[]) => {
-  process.stderr.write("[WARN] " + args.join(" ") + "\n");
-};
-
 // console.error already goes to stderr by default
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
-  ListToolsRequestSchema,
   CallToolRequestSchema,
+  ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { Context } from "@mcampa/ai-context-core";
-import { MilvusVectorDatabase } from "@mcampa/ai-context-core";
+import {
+  Context,
+  LibSQLVectorDatabase,
+  MilvusVectorDatabase,
+  QdrantVectorDatabase,
+  VectorDatabase,
+  VectorDatabaseFactory,
+  VectorDatabaseType,
+} from "@mcampa/ai-context-core";
 
 // Import our modular components
 import {
+  ContextMcpConfig,
   createMcpConfig,
   logConfigurationSummary,
   showHelpMessage,
-  ContextMcpConfig,
 } from "./config.js";
 import {
   createEmbeddingInstance,
   logEmbeddingProviderInfo,
 } from "./embedding.js";
+import { ToolHandlers } from "./handlers.js";
 import { SnapshotManager } from "./snapshot.js";
 import { SyncManager } from "./sync.js";
-import { ToolHandlers } from "./handlers.js";
+
+const _originalConsoleLog = console.log;
+const _originalConsoleWarn = console.warn;
+
+console.log = (...args: unknown[]) => {
+  process.stderr.write(`[LOG] ${args.join(" ")}\n`);
+};
+
+console.warn = (...args: unknown[]) => {
+  process.stderr.write(`[WARN] ${args.join(" ")}\n`);
+};
 
 class ContextMcpServer {
   private server: Server;
@@ -69,11 +76,95 @@ class ContextMcpServer {
     const embedding = createEmbeddingInstance(config);
     logEmbeddingProviderInfo(config, embedding);
 
-    // Initialize vector database
-    const vectorDatabase = new MilvusVectorDatabase({
-      address: config.milvusAddress,
-      ...(config.milvusToken && { token: config.milvusToken }),
-    });
+    // Initialize vector database based on configuration
+    // Auto-select FAISS if no external database is configured and FAISS is available
+    let vectorDatabase: VectorDatabase;
+
+    const hasExternalDb =
+      config.milvusAddress || config.milvusToken || config.qdrantUrl;
+    const faissAvailable = VectorDatabaseFactory.isFaissAvailable();
+
+    if (!hasExternalDb && !config.vectorDbType) {
+      // Default to FAISS for zero-config local development (if available)
+      if (faissAvailable) {
+        console.log(
+          "[VECTORDB] No external vector database configured, using FAISS (local file-based)",
+        );
+        vectorDatabase = VectorDatabaseFactory.create(
+          VectorDatabaseType.FAISS_LOCAL,
+          {
+            storageDir: process.env.FAISS_STORAGE_DIR,
+          },
+        );
+      } else {
+        // FAISS not available, require explicit configuration
+        console.error(
+          "[VECTORDB] ❌ No vector database configured and FAISS is not available.",
+        );
+        console.error("[VECTORDB] Please configure one of the following:");
+        console.error(
+          "[VECTORDB]   - MILVUS_ADDRESS or MILVUS_TOKEN for Milvus",
+        );
+        console.error("[VECTORDB]   - QDRANT_URL for Qdrant");
+        throw new Error(
+          "No vector database configured. FAISS native bindings are not available in this environment. " +
+            "Please set MILVUS_ADDRESS/MILVUS_TOKEN or QDRANT_URL to use an external vector database.",
+        );
+      }
+    } else if (config.vectorDbType === "faiss-local") {
+      if (!faissAvailable) {
+        throw new Error(
+          "FAISS vector database was explicitly requested but native bindings are not available. " +
+            "Please use VECTOR_DB_TYPE=milvus or VECTOR_DB_TYPE=qdrant instead.",
+        );
+      }
+      console.log("[VECTORDB] Using FAISS (local file-based)");
+      vectorDatabase = VectorDatabaseFactory.create(
+        VectorDatabaseType.FAISS_LOCAL,
+        {
+          storageDir: process.env.FAISS_STORAGE_DIR,
+        },
+      );
+    } else if (config.vectorDbType === "qdrant") {
+      // Parse Qdrant URL to get address for gRPC
+      const qdrantUrl = config.qdrantUrl || "http://localhost:6333";
+      const url = new URL(
+        qdrantUrl.startsWith("http") ? qdrantUrl : `http://${qdrantUrl}`,
+      );
+
+      // For Qdrant gRPC, we need host:port format.
+      // Auto-convert default REST port (6333) to default gRPC port (6334).
+      let grpcPort = url.port || "6334";
+      if (grpcPort === "6333") {
+        console.log(
+          "[VECTORDB] Qdrant REST port 6333 detected, switching to gRPC port 6334.",
+        );
+        grpcPort = "6334";
+      }
+      const grpcAddress = `${url.hostname}:${grpcPort}`;
+
+      console.log(`[VECTORDB] Qdrant gRPC address: ${grpcAddress}`);
+
+      vectorDatabase = new QdrantVectorDatabase({
+        address: grpcAddress,
+        ...(config.qdrantApiKey && { apiKey: config.qdrantApiKey }),
+      });
+    } else if (config.vectorDbType === "libsql") {
+      // LibSQL local database - pure JavaScript, no native bindings required
+      console.log("[VECTORDB] Using LibSQL (local file-based, pure JS)");
+      vectorDatabase = new LibSQLVectorDatabase({
+        storageDir: process.env.LIBSQL_STORAGE_DIR,
+      });
+    } else {
+      // Default to Milvus
+      console.log(
+        `[VECTORDB] Using Milvus: ${config.milvusAddress || "default"}`,
+      );
+      vectorDatabase = new MilvusVectorDatabase({
+        address: config.milvusAddress,
+        ...(config.milvusToken && { token: config.milvusToken }),
+      });
+    }
 
     // Initialize Claude Context
     this.context = new Context({

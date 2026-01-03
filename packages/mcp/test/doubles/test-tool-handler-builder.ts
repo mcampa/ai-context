@@ -1,0 +1,83 @@
+import { Context } from "@mcampa/ai-context-core";
+import { FakeEmbedding } from "@mcampa/ai-context-core/test/doubles/fake-embedding.js";
+import { FakeVectorDatabase } from "@mcampa/ai-context-core/test/doubles/fake-vector-database.js";
+import { TestContextBuilder } from "@mcampa/ai-context-core/test/doubles/test-context-builder.js";
+import { ToolHandlers } from "../../src/handlers.js";
+import { FakeSnapshotManager } from "./fake-snapshot-manager.js";
+
+/**
+ * TestToolHandlerBuilder
+ *
+ * Fluent API for building ToolHandlers with test doubles for integration testing.
+ *
+ * Example:
+ *   const {handlers, context, snapshotManager} = new TestToolHandlerBuilder()
+ *     .withFakeEmbedding(128)
+ *     .withFakeVectorDatabase()
+ *     .build();
+ */
+export class TestToolHandlerBuilder {
+  private context?: Context;
+  private snapshotManager?: FakeSnapshotManager;
+  private embeddingDimension: number = 128;
+
+  public withContext(context: Context): this {
+    this.context = context;
+    return this;
+  }
+
+  public withSnapshotManager(snapshotManager: FakeSnapshotManager): this {
+    this.snapshotManager = snapshotManager;
+    return this;
+  }
+
+  public withEmbeddingDimension(dimension: number): this {
+    this.embeddingDimension = dimension;
+    return this;
+  }
+
+  public build(): {
+    handlers: ToolHandlers;
+    context: Context;
+    snapshotManager: FakeSnapshotManager;
+    fakeDb: FakeVectorDatabase;
+    fakeEmbedding: FakeEmbedding;
+  } {
+    // Create default test doubles if not provided
+    const fakeDb = new FakeVectorDatabase({ address: "test" });
+    const fakeEmbedding = new FakeEmbedding(this.embeddingDimension);
+
+    const context =
+      this.context ||
+      new TestContextBuilder()
+        .withEmbedding(fakeEmbedding)
+        .withVectorDatabase(fakeDb)
+        .build();
+
+    const snapshotManager = this.snapshotManager || new FakeSnapshotManager();
+
+    // Cast to any to avoid type conflicts between source and dist imports
+    const handlers = new ToolHandlers(context as any, snapshotManager as any);
+
+    return {
+      handlers,
+      context: context as Context,
+      snapshotManager,
+      fakeDb,
+      fakeEmbedding,
+    };
+  }
+
+  /**
+   * Static helper to create a fully configured test setup in one call
+   */
+  public static createDefault(): {
+    handlers: ToolHandlers;
+    context: Context;
+    snapshotManager: FakeSnapshotManager;
+    fakeDb: FakeVectorDatabase;
+    fakeEmbedding: FakeEmbedding;
+  } {
+    return new TestToolHandlerBuilder().build();
+  }
+}

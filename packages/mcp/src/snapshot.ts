@@ -1,14 +1,14 @@
-import * as fs from "fs";
-import * as path from "path";
-import * as os from "os";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import {
+  CodebaseInfo,
+  CodebaseInfoIndexed,
+  CodebaseInfoIndexFailed,
+  CodebaseInfoIndexing,
   CodebaseSnapshot,
   CodebaseSnapshotV1,
   CodebaseSnapshotV2,
-  CodebaseInfo,
-  CodebaseInfoIndexing,
-  CodebaseInfoIndexed,
-  CodebaseInfoIndexFailed,
 } from "./config.js";
 
 export class SnapshotManager {
@@ -165,70 +165,19 @@ export class SnapshotManager {
   }
 
   public getIndexedCodebases(): string[] {
-    // Read from JSON file to ensure consistency and persistence
-    try {
-      if (!fs.existsSync(this.snapshotFilePath)) {
-        return [];
-      }
-
-      const snapshotData = fs.readFileSync(this.snapshotFilePath, "utf8");
-      const snapshot: CodebaseSnapshot = JSON.parse(snapshotData);
-
-      if (this.isV2Format(snapshot)) {
-        return Object.entries(snapshot.codebases)
-          .filter(([_, info]) => info.status === "indexed")
-          .map(([path, _]) => path);
-      } else {
-        // V1 format
-        return snapshot.indexedCodebases || [];
-      }
-    } catch (error) {
-      console.warn(
-        `[SNAPSHOT-DEBUG] Error reading indexed codebases from file:`,
-        error,
-      );
-      // Fallback to memory if file reading fails
-      return [...this.indexedCodebases];
-    }
+    // Return in-memory state as the source of truth during active session.
+    // Disk file is only used for initialization (loadCodebaseSnapshot) and persistence.
+    // This eliminates the race condition between setCodebaseIndexed() and saveCodebaseSnapshot().
+    // See: https://github.com/mcampa/ai-context/issues/49
+    // See: https://github.com/mcampa/ai-context/issues/50
+    return [...this.indexedCodebases];
   }
 
   public getIndexingCodebases(): string[] {
-    // Read from JSON file to ensure consistency and persistence
-    try {
-      if (!fs.existsSync(this.snapshotFilePath)) {
-        return [];
-      }
-
-      const snapshotData = fs.readFileSync(this.snapshotFilePath, "utf8");
-      const snapshot: CodebaseSnapshot = JSON.parse(snapshotData);
-
-      if (this.isV2Format(snapshot)) {
-        return Object.entries(snapshot.codebases)
-          .filter(([_, info]) => info.status === "indexing")
-          .map(([path, _]) => path);
-      } else {
-        // V1 format - Handle both legacy array format and new object format
-        if (Array.isArray(snapshot.indexingCodebases)) {
-          // Legacy format: return the array directly
-          return snapshot.indexingCodebases;
-        } else if (
-          snapshot.indexingCodebases &&
-          typeof snapshot.indexingCodebases === "object"
-        ) {
-          // New format: return the keys of the object
-          return Object.keys(snapshot.indexingCodebases);
-        }
-      }
-
-      return [];
-    } catch (error) {
-      console.warn(
-        `[SNAPSHOT-DEBUG] Error reading indexing codebases from file:`,
-        error,
-      );
-      // Fallback to memory if file reading fails
-      return Array.from(this.indexingCodebases.keys());
-    }
+    // Return in-memory state as the source of truth during active session.
+    // This eliminates the race condition between setCodebaseIndexing() and saveCodebaseSnapshot().
+    // See: https://github.com/mcampa/ai-context/issues/49
+    return Array.from(this.indexingCodebases.keys());
   }
 
   /**
@@ -239,46 +188,10 @@ export class SnapshotManager {
   }
 
   public getIndexingProgress(codebasePath: string): number | undefined {
-    // Read from JSON file to ensure consistency and persistence
-    try {
-      if (!fs.existsSync(this.snapshotFilePath)) {
-        return undefined;
-      }
-
-      const snapshotData = fs.readFileSync(this.snapshotFilePath, "utf8");
-      const snapshot: CodebaseSnapshot = JSON.parse(snapshotData);
-
-      if (this.isV2Format(snapshot)) {
-        const info = snapshot.codebases[codebasePath];
-        if (info && info.status === "indexing") {
-          return info.indexingPercentage || 0;
-        }
-        return undefined;
-      } else {
-        // V1 format - Handle both legacy array format and new object format
-        if (Array.isArray(snapshot.indexingCodebases)) {
-          // Legacy format: if path exists in array, assume 0% progress
-          return snapshot.indexingCodebases.includes(codebasePath)
-            ? 0
-            : undefined;
-        } else if (
-          snapshot.indexingCodebases &&
-          typeof snapshot.indexingCodebases === "object"
-        ) {
-          // New format: return the actual progress percentage
-          return snapshot.indexingCodebases[codebasePath];
-        }
-      }
-
-      return undefined;
-    } catch (error) {
-      console.warn(
-        `[SNAPSHOT-DEBUG] Error reading progress from file for ${codebasePath}:`,
-        error,
-      );
-      // Fallback to memory if file reading fails
-      return this.indexingCodebases.get(codebasePath);
-    }
+    // Return in-memory state as the source of truth during active session.
+    // This eliminates the race condition between setCodebaseIndexing() and saveCodebaseSnapshot().
+    // See: https://github.com/mcampa/ai-context/issues/49
+    return this.indexingCodebases.get(codebasePath);
   }
 
   /**
@@ -452,8 +365,8 @@ export class SnapshotManager {
     // Update info map
     const info: CodebaseInfoIndexFailed = {
       status: "indexfailed",
-      errorMessage: errorMessage,
-      lastAttemptedPercentage: lastAttemptedPercentage,
+      errorMessage,
+      lastAttemptedPercentage,
       lastUpdated: new Date().toISOString(),
     };
     this.codebaseInfoMap.set(codebasePath, info);
@@ -565,7 +478,7 @@ export class SnapshotManager {
 
       const snapshot: CodebaseSnapshotV2 = {
         formatVersion: "v2",
-        codebases: codebases,
+        codebases,
         lastUpdated: new Date().toISOString(),
       };
 

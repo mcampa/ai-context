@@ -17,6 +17,7 @@
     "lint": "pnpm -r lint",
     "lint:fix": "pnpm -r run lint:fix",
     "test": "pnpm -r run test",
+    "test:integration": "pnpm -r run test:integration",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md}\"",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
     "typecheck": "pnpm -r run typecheck",
