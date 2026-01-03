@@ -1,6 +1,6 @@
 {
   "name": "@mcampa/ai-context-mcp",
-  "version": "0.0.2",
+  "version": "0.1.0",
   "description": "Model Context Protocol integration for AI Context",
   "type": "module",
   "license": "MIT",

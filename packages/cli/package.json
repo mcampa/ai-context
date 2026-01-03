@@ -1,6 +1,6 @@
 {
   "name": "@mcampa/ai-context-cli",
-  "version": "0.0.2",
+  "version": "0.1.0",
   "description": "CLI tool for indexing codebases with AI Context",
   "type": "module",
   "main": "dist/index.js",

@@ -11,6 +11,8 @@ export type {
   ContextConfig,
   OpenAIEmbeddingConfig,
   MilvusConfig,
+  QdrantConfig,
+  VectorDatabaseType,
   CLIOptions,
   IndexResult,
 } from "./types.js";

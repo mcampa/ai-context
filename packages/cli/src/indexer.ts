@@ -1,7 +1,9 @@
 import {
   Context,
   MilvusVectorDatabase,
+  QdrantVectorDatabase,
   OpenAIEmbedding,
+  type VectorDatabase,
 } from "@mcampa/ai-context-core";
 import type { ContextConfig, IndexResult } from "./types.js";
 
@@ -60,15 +62,28 @@ export async function runIndex(
   });
   console.log(`   Model: ${config.embeddingConfig!.model}`);
 
-  // Initialize vector database
-  console.log("🔧 Initializing Milvus vector database...");
-  const vectorDatabase = new MilvusVectorDatabase({
-    address: config.vectorDatabaseConfig!.address,
-    token: config.vectorDatabaseConfig!.token,
-    username: config.vectorDatabaseConfig!.username,
-    password: config.vectorDatabaseConfig!.password,
-    ssl: config.vectorDatabaseConfig!.ssl,
-  });
+  // Initialize vector database based on type
+  const dbType = config.vectorDatabaseType || "milvus";
+  let vectorDatabase: VectorDatabase;
+
+  if (dbType === "qdrant") {
+    console.log("🔧 Initializing Qdrant vector database...");
+    vectorDatabase = new QdrantVectorDatabase({
+      address: config.qdrantConfig!.url,
+      apiKey: config.qdrantConfig!.apiKey,
+      timeout: config.qdrantConfig!.timeout,
+    });
+    console.log(`   URL: ${config.qdrantConfig!.url}`);
+  } else {
+    console.log("🔧 Initializing Milvus vector database...");
+    vectorDatabase = new MilvusVectorDatabase({
+      address: config.vectorDatabaseConfig!.address,
+      token: config.vectorDatabaseConfig!.token,
+      username: config.vectorDatabaseConfig!.username,
+      password: config.vectorDatabaseConfig!.password,
+      ssl: config.vectorDatabaseConfig!.ssl,
+    });
+  }
 
   // Create context instance
   console.log("🔧 Creating context instance...\n");

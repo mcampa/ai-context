@@ -226,7 +226,7 @@ export async function loadConfig(configPath?: string): Promise<ContextConfig> {
       throw new Error(
         `No config file found. Please create one of:\n` +
           CONFIG_FILE_NAMES.map((f) => `  - ${f}`).join("\n") +
-          `\n\nExample JS/TS config:\n\n` +
+          `\n\nExample JS/TS config (Milvus):\n\n` +
           `export default {\n` +
           `  name: "my-project",\n` +
           `  embeddingConfig: {\n` +
@@ -235,6 +235,18 @@ export async function loadConfig(configPath?: string): Promise<ContextConfig> {
           `  },\n` +
           `  vectorDatabaseConfig: {\n` +
           `    address: "localhost:19530",\n` +
+          `  },\n` +
+          `};\n\n` +
+          `Example JS/TS config (Qdrant):\n\n` +
+          `export default {\n` +
+          `  name: "my-project",\n` +
+          `  embeddingConfig: {\n` +
+          `    apiKey: process.env.OPENAI_API_KEY,\n` +
+          `    model: "text-embedding-3-small",\n` +
+          `  },\n` +
+          `  vectorDatabaseType: "qdrant",\n` +
+          `  qdrantConfig: {\n` +
+          `    url: "http://localhost:6333",\n` +
           `  },\n` +
           `};\n\n` +
           `Example JSON config (ai-context.config.json):\n\n` +
@@ -298,18 +310,34 @@ function validateConfig(config: ContextConfig): void {
     }
   }
 
-  // Check required vector database config
-  if (!config.vectorDatabaseConfig) {
-    errors.push("Missing required field: vectorDatabaseConfig");
-  } else {
-    // At least address or token is required
-    if (
-      !config.vectorDatabaseConfig.address &&
-      !config.vectorDatabaseConfig.token
-    ) {
+  // Check required vector database config based on type
+  const dbType = config.vectorDatabaseType || "milvus";
+
+  if (dbType === "qdrant") {
+    // Validate Qdrant configuration
+    if (!config.qdrantConfig) {
       errors.push(
-        "vectorDatabaseConfig requires either 'address' or 'token' to be set",
+        "Missing required field: qdrantConfig (required when vectorDatabaseType is 'qdrant')",
       );
+    } else {
+      if (!config.qdrantConfig.url) {
+        errors.push("Missing required field: qdrantConfig.url");
+      }
+    }
+  } else {
+    // Validate Milvus configuration (default)
+    if (!config.vectorDatabaseConfig) {
+      errors.push("Missing required field: vectorDatabaseConfig");
+    } else {
+      // At least address or token is required
+      if (
+        !config.vectorDatabaseConfig.address &&
+        !config.vectorDatabaseConfig.token
+      ) {
+        errors.push(
+          "vectorDatabaseConfig requires either 'address' or 'token' to be set",
+        );
+      }
     }
   }
 

@@ -2,6 +2,11 @@
 
 A command-line tool for indexing codebases with AI-powered semantic search. This CLI tool reads your configuration and indexes your codebase into a vector database for semantic search capabilities.
 
+## Supported Vector Databases
+
+- **Milvus** - Self-hosted or Zilliz Cloud
+- **Qdrant** - Self-hosted or Qdrant Cloud
+
 ## Installation
 
 You can run this tool directly without installation using `npx`:
@@ -26,7 +31,7 @@ npm install -D @mcampa/ai-context-cli
 
 1. Create a configuration file in your project root. You can use TypeScript (`.ts`), JavaScript (`.js`), or JSON (`.json`):
 
-**TypeScript/JavaScript projects** - `ai-context.config.ts`:
+**TypeScript/JavaScript projects with Milvus** - `ai-context.config.ts`:
 
 ```typescript
 import type { ContextConfig } from "@mcampa/ai-context-cli";
@@ -41,6 +46,29 @@ const config: ContextConfig = {
     address: "localhost:19530",
     // Or for Zilliz Cloud:
     // token: process.env.ZILLIZ_TOKEN,
+  },
+};
+
+export default config;
+```
+
+**TypeScript/JavaScript projects with Qdrant** - `ai-context.config.ts`:
+
+```typescript
+import type { ContextConfig } from "@mcampa/ai-context-cli";
+
+const config: ContextConfig = {
+  name: "my-project",
+  embeddingConfig: {
+    apiKey: process.env.OPENAI_API_KEY!,
+    model: "text-embedding-3-small",
+  },
+  vectorDatabaseType: "qdrant",
+  qdrantConfig: {
+    url: "http://localhost:6333",
+    // Or for Qdrant Cloud:
+    // url: "https://your-cluster.qdrant.io",
+    // apiKey: process.env.QDRANT_API_KEY,
   },
 };
 
@@ -72,6 +100,8 @@ npx @mcampa/ai-context-cli
 
 ### TypeScript Configuration (`ai-context.config.ts`)
 
+#### With Milvus (default)
+
 ```typescript
 import type { ContextConfig } from "@mcampa/ai-context-cli";
 
@@ -86,6 +116,9 @@ const config: ContextConfig = {
     // Optional: Custom base URL for OpenAI-compatible APIs
     baseURL: "https://api.openai.com/v1",
   },
+
+  // Optional: Specify vector database type (default: "milvus")
+  // vectorDatabaseType: "milvus",
 
   // Required: Milvus vector database configuration
   vectorDatabaseConfig: {
@@ -119,6 +152,39 @@ const config: ContextConfig = {
 export default config;
 ```
 
+#### With Qdrant
+
+```typescript
+import type { ContextConfig } from "@mcampa/ai-context-cli";
+
+const config: ContextConfig = {
+  name: "my-project",
+
+  embeddingConfig: {
+    apiKey: process.env.OPENAI_API_KEY!,
+    model: "text-embedding-3-small",
+  },
+
+  // Use Qdrant as the vector database
+  vectorDatabaseType: "qdrant",
+
+  // Required: Qdrant configuration
+  qdrantConfig: {
+    // Qdrant server URL
+    url: "http://localhost:6333",
+
+    // For Qdrant Cloud, include the API key:
+    // url: "https://your-cluster.qdrant.io",
+    // apiKey: process.env.QDRANT_API_KEY,
+
+    // Optional: Connection timeout in milliseconds (default: 10000)
+    // timeout: 30000,
+  },
+};
+
+export default config;
+```
+
 ### JavaScript Configuration (`ai-context.config.js`)
 
 ```javascript
@@ -141,6 +207,8 @@ export default config;
 
 For non-JavaScript/TypeScript projects (Python, Go, Rust, etc.), you can use a JSON config file:
 
+#### With Milvus
+
 ```json
 {
   "name": "my-project",
@@ -156,6 +224,23 @@ For non-JavaScript/TypeScript projects (Python, Go, Rust, etc.), you can use a J
   "ignorePatterns": ["venv/**", "__pycache__/**", "target/**"],
   "customExtensions": [".proto"],
   "customIgnorePatterns": ["*_test.go"]
+}
+```
+
+#### With Qdrant
+
+```json
+{
+  "name": "my-project",
+  "embeddingConfig": {
+    "apiKey": "[OPENAI_API_KEY]",
+    "model": "text-embedding-3-small"
+  },
+  "vectorDatabaseType": "qdrant",
+  "qdrantConfig": {
+    "url": "[QDRANT_URL]",
+    "apiKey": "[QDRANT_API_KEY]"
+  }
 }
 ```
 
@@ -258,6 +343,8 @@ You can use environment variables in your configuration file:
 | `OPENAI_BASE_URL` | Custom OpenAI-compatible API base URL  |
 | `ZILLIZ_TOKEN`    | Zilliz Cloud API token                 |
 | `MILVUS_ADDRESS`  | Milvus server address                  |
+| `QDRANT_URL`      | Qdrant server URL                      |
+| `QDRANT_API_KEY`  | Qdrant Cloud API key                   |
 | `DEBUG`           | Enable debug output (set to any value) |
 
 ## Supported File Types
@@ -305,6 +392,18 @@ Either provide a Milvus `address` or a Zilliz Cloud `token` in your config.
 
 - For self-hosted Milvus: Ensure Milvus is running and accessible at the configured address
 - For Zilliz Cloud: Verify your token is correct and not expired
+- For self-hosted Qdrant: Ensure Qdrant is running and accessible at the configured URL (default port: 6333)
+- For Qdrant Cloud: Verify your API key is correct and the cluster URL is valid
+
+### "Missing required field: qdrantConfig.url"
+
+When using Qdrant, the `url` field is required. Make sure to specify the complete URL:
+
+```typescript
+qdrantConfig: {
+  url: "http://localhost:6333",
+}
+```
 
 ## License
 

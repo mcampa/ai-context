@@ -1,6 +1,6 @@
 {
   "name": "@mcampa/ai-context",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "A powerful code indexing tool with multi-platform support",
   "type": "module",
   "private": true,

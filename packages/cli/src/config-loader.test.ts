@@ -530,6 +530,123 @@ describe("config-loader", () => {
         delete process.env.TEST_PATTERN;
       }
     });
+
+    it("should load and validate a valid Qdrant config", async () => {
+      const configPath = getUniqueConfigPath("js");
+      const configContent = `
+        export default {
+          name: "test-project",
+          embeddingConfig: {
+            apiKey: "test-key",
+            model: "text-embedding-3-small",
+          },
+          vectorDatabaseType: "qdrant",
+          qdrantConfig: {
+            url: "http://localhost:6333",
+          },
+        };
+      `;
+      writeFileSync(configPath, configContent);
+
+      const config = await loadConfig(configPath);
+
+      expect(config.name).toBe("test-project");
+      expect(config.vectorDatabaseType).toBe("qdrant");
+      expect(config.qdrantConfig?.url).toBe("http://localhost:6333");
+    });
+
+    it("should load and validate Qdrant Cloud config with API key", async () => {
+      const configPath = getUniqueConfigPath("js");
+      const configContent = `
+        export default {
+          embeddingConfig: {
+            apiKey: "test-key",
+            model: "text-embedding-3-small",
+          },
+          vectorDatabaseType: "qdrant",
+          qdrantConfig: {
+            url: "https://my-cluster.qdrant.io",
+            apiKey: "qdrant-api-key",
+            timeout: 15000,
+          },
+        };
+      `;
+      writeFileSync(configPath, configContent);
+
+      const config = await loadConfig(configPath);
+
+      expect(config.qdrantConfig?.url).toBe("https://my-cluster.qdrant.io");
+      expect(config.qdrantConfig?.apiKey).toBe("qdrant-api-key");
+      expect(config.qdrantConfig?.timeout).toBe(15000);
+    });
+
+    it("should throw error for missing qdrantConfig when vectorDatabaseType is qdrant", async () => {
+      const configPath = getUniqueConfigPath("js");
+      const configContent = `
+        export default {
+          embeddingConfig: {
+            apiKey: "test-key",
+            model: "text-embedding-3-small",
+          },
+          vectorDatabaseType: "qdrant",
+        };
+      `;
+      writeFileSync(configPath, configContent);
+
+      await expect(loadConfig(configPath)).rejects.toThrow(
+        "Missing required field: qdrantConfig",
+      );
+    });
+
+    it("should throw error for missing qdrantConfig.url", async () => {
+      const configPath = getUniqueConfigPath("js");
+      const configContent = `
+        export default {
+          embeddingConfig: {
+            apiKey: "test-key",
+            model: "text-embedding-3-small",
+          },
+          vectorDatabaseType: "qdrant",
+          qdrantConfig: {
+            apiKey: "some-api-key",
+          },
+        };
+      `;
+      writeFileSync(configPath, configContent);
+
+      await expect(loadConfig(configPath)).rejects.toThrow(
+        "Missing required field: qdrantConfig.url",
+      );
+    });
+
+    it("should load Qdrant JSON config with environment variable substitution", async () => {
+      const configPath = getUniqueConfigPath("json");
+      process.env.TEST_QDRANT_URL = "https://my-cluster.qdrant.io";
+      process.env.TEST_QDRANT_API_KEY = "my-qdrant-api-key";
+
+      const configContent = JSON.stringify({
+        name: "test-project",
+        embeddingConfig: {
+          apiKey: "test-key",
+          model: "text-embedding-3-small",
+        },
+        vectorDatabaseType: "qdrant",
+        qdrantConfig: {
+          url: "[TEST_QDRANT_URL]",
+          apiKey: "[TEST_QDRANT_API_KEY]",
+        },
+      });
+      writeFileSync(configPath, configContent);
+
+      try {
+        const config = await loadConfig(configPath);
+        expect(config.qdrantConfig?.url).toBe("https://my-cluster.qdrant.io");
+        expect(config.qdrantConfig?.apiKey).toBe("my-qdrant-api-key");
+      } finally {
+        delete process.env.TEST_QDRANT_URL;
+        delete process.env.TEST_QDRANT_API_KEY;
+      }
+    });
   });
 
   describe("findTsxBinary", () => {

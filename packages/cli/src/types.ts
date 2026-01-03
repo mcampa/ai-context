@@ -27,6 +27,23 @@ export interface MilvusConfig {
 }
 
 /**
+ * Configuration for Qdrant vector database
+ */
+export interface QdrantConfig {
+  /** Qdrant server URL (e.g., "http://localhost:6333" or "https://your-cluster.qdrant.io") */
+  url: string;
+  /** API key for Qdrant Cloud (optional for self-hosted instances) */
+  apiKey?: string;
+  /** Connection timeout in milliseconds (default: 10000) */
+  timeout?: number;
+}
+
+/**
+ * Supported vector database types
+ */
+export type VectorDatabaseType = "milvus" | "qdrant";
+
+/**
  * Main configuration interface for ai-context.config.ts/js
  */
 export interface ContextConfig {
@@ -34,8 +51,15 @@ export interface ContextConfig {
   name?: string;
   /** OpenAI embedding configuration */
   embeddingConfig?: OpenAIEmbeddingConfig;
-  /** Milvus vector database configuration */
+  /**
+   * Vector database type to use
+   * @default "milvus"
+   */
+  vectorDatabaseType?: VectorDatabaseType;
+  /** Milvus vector database configuration (used when vectorDatabaseType is "milvus" or not set) */
   vectorDatabaseConfig?: MilvusConfig;
+  /** Qdrant vector database configuration (used when vectorDatabaseType is "qdrant") */
+  qdrantConfig?: QdrantConfig;
   /**
    * Supported file extensions for indexing
    * If provided, replaces the default extensions

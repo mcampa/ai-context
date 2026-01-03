@@ -3,6 +3,8 @@ import type {
   ContextConfig,
   OpenAIEmbeddingConfig,
   MilvusConfig,
+  QdrantConfig,
+  VectorDatabaseType,
   CLIOptions,
   IndexResult,
 } from "./types.js";
@@ -119,6 +121,88 @@ describe("Types", () => {
 
       expect(config.username).toBe("root");
       expect(config.password).toBe("milvus");
+    });
+  });
+
+  describe("QdrantConfig", () => {
+    it("should require url", () => {
+      const config: QdrantConfig = {
+        url: "http://localhost:6333",
+      };
+
+      expect(config.url).toBe("http://localhost:6333");
+    });
+
+    it("should allow api key for cloud instances", () => {
+      const config: QdrantConfig = {
+        url: "https://my-cluster.qdrant.io",
+        apiKey: "my-api-key",
+      };
+
+      expect(config.url).toBe("https://my-cluster.qdrant.io");
+      expect(config.apiKey).toBe("my-api-key");
+    });
+
+    it("should allow optional timeout", () => {
+      const config: QdrantConfig = {
+        url: "http://localhost:6333",
+        timeout: 30000,
+      };
+
+      expect(config.timeout).toBe(30000);
+    });
+  });
+
+  describe("ContextConfig with Qdrant", () => {
+    it("should allow Qdrant configuration", () => {
+      const config: ContextConfig = {
+        name: "my-project",
+        embeddingConfig: {
+          apiKey: "test-key",
+          model: "text-embedding-3-small",
+        },
+        vectorDatabaseType: "qdrant",
+        qdrantConfig: {
+          url: "http://localhost:6333",
+        },
+      };
+
+      expect(config.vectorDatabaseType).toBe("qdrant");
+      expect(config.qdrantConfig?.url).toBe("http://localhost:6333");
+    });
+
+    it("should allow Qdrant Cloud configuration", () => {
+      const config: ContextConfig = {
+        embeddingConfig: {
+          apiKey: "test-key",
+          model: "text-embedding-3-small",
+        },
+        vectorDatabaseType: "qdrant",
+        qdrantConfig: {
+          url: "https://my-cluster.qdrant.io",
+          apiKey: "qdrant-api-key",
+          timeout: 15000,
+        },
+      };
+
+      expect(config.qdrantConfig?.apiKey).toBe("qdrant-api-key");
+      expect(config.qdrantConfig?.timeout).toBe(15000);
+    });
+
+    it("should allow explicit milvus type", () => {
+      const dbType: VectorDatabaseType = "milvus";
+      const config: ContextConfig = {
+        embeddingConfig: {
+          apiKey: "test-key",
+          model: "text-embedding-3-small",
+        },
+        vectorDatabaseType: dbType,
+        vectorDatabaseConfig: {
+          address: "localhost:19530",
+        },
+      };
+
+      expect(config.vectorDatabaseType).toBe("milvus");
     });
   });
 
