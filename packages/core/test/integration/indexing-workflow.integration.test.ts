@@ -242,7 +242,7 @@ describe("indexing Workflow Integration", () => {
       await context.indexCodebase(fixturesPath);
 
       const collectionName = context.getCollectionName();
-      const firstDocCount = fakeDb.getCollectionDocumentCount(collectionName);
+      const _firstDocCount = fakeDb.getCollectionDocumentCount(collectionName);
 
       // Act: Force reindex
       await context.indexCodebase(fixturesPath, undefined, true);

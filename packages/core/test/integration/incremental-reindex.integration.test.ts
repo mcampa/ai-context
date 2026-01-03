@@ -185,7 +185,7 @@ describe("incremental Reindex Integration", () => {
       const initialFile1Chunks = initialDocs.filter((doc) =>
         doc.relativePath.includes("file1.ts"),
       );
-      const initialCount = fakeDb.getCollectionDocumentCount(collectionName);
+      const _initialCount = fakeDb.getCollectionDocumentCount(collectionName);
 
       // Act: Modify file
       await fs.writeFile(

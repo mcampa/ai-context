@@ -25,7 +25,7 @@ export class FakeEmbedding extends Embedding {
     this.dimension = dimension;
   }
 
-  async detectDimension(testText?: string): Promise<number> {
+  async detectDimension(_testText?: string): Promise<number> {
     return this.dimension;
   }
 

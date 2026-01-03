@@ -12,13 +12,13 @@ import { QdrantVectorDatabase } from "../../src/vectordb/qdrant-vectordb";
 
 // Check if FAISS native bindings are available
 let FaissVectorDatabase: any;
-let faissAvailable = false;
+let _faissAvailable = false;
 try {
   FaissVectorDatabase = (await import("../../src/vectordb/faiss-vectordb"))
     .FaissVectorDatabase;
-  faissAvailable = true;
+  _faissAvailable = true;
 } catch {
-  faissAvailable = false;
+  _faissAvailable = false;
 }
 
 describe("vectorDatabaseFactory", () => {

@@ -129,7 +129,7 @@ export class QdrantVectorDatabase extends BaseVectorDatabase<QdrantConfig> {
    * Qdrant doesn't require explicit collection loading
    * Collections are loaded on-demand automatically
    */
-  protected async ensureLoaded(collectionName: string): Promise<void> {
+  protected async ensureLoaded(_collectionName: string): Promise<void> {
     // No-op for Qdrant - collections are loaded automatically
     return Promise.resolve();
   }
@@ -140,7 +140,7 @@ export class QdrantVectorDatabase extends BaseVectorDatabase<QdrantConfig> {
   async createCollection(
     collectionName: string,
     dimension: number,
-    description?: string,
+    _description?: string,
   ): Promise<void> {
     await this.ensureInitialized();
 
@@ -173,7 +173,7 @@ export class QdrantVectorDatabase extends BaseVectorDatabase<QdrantConfig> {
   async createHybridCollection(
     collectionName: string,
     dimension: number,
-    description?: string,
+    _description?: string,
   ): Promise<void> {
     await this.ensureInitialized();
 

@@ -211,7 +211,7 @@ describe("simpleBM25", () => {
       // Assert
       expect(vector.values.length).toBe(2);
       // Find indices for 'fox' and 'jumps'
-      const vocab = bm25.getVocabulary();
+      const _vocab = bm25.getVocabulary();
       const idfScores = bm25.getIDFScores();
       const foxScore = idfScores.get("fox") || 0;
       const jumpsScore = idfScores.get("jumps") || 0;

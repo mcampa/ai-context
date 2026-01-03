@@ -38,7 +38,7 @@ export class FakeVectorDatabase extends BaseVectorDatabase<BaseDatabaseConfig> {
   async createCollection(
     collectionName: string,
     dimension: number,
-    description?: string,
+    _description?: string,
   ): Promise<void> {
     await this.ensureInitialized();
     await this.simulateDelay();
@@ -59,7 +59,7 @@ export class FakeVectorDatabase extends BaseVectorDatabase<BaseDatabaseConfig> {
   async createHybridCollection(
     collectionName: string,
     dimension: number,
-    description?: string,
+    _description?: string,
   ): Promise<void> {
     await this.ensureInitialized();
     await this.simulateDelay();
@@ -240,7 +240,7 @@ export class FakeVectorDatabase extends BaseVectorDatabase<BaseDatabaseConfig> {
       }
 
       // Accumulate scores for RRF
-      requestResults.forEach((result, rank) => {
+      requestResults.forEach((result, _rank) => {
         const existing = allResults.get(result.document.id);
         if (existing) {
           existing.scores.push(result.score);

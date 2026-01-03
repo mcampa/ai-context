@@ -38,8 +38,8 @@ class TestVectorDatabase extends BaseVectorDatabase<TestDbConfig> {
 
   async createCollection(
     name: string,
-    dimension: number,
-    description?: string,
+    _dimension: number,
+    _description?: string,
   ): Promise<void> {
     await this.ensureInitialized();
     this.mockCollections.add(name);
@@ -47,8 +47,8 @@ class TestVectorDatabase extends BaseVectorDatabase<TestDbConfig> {
 
   async createHybridCollection(
     name: string,
-    dimension: number,
-    description?: string,
+    _dimension: number,
+    _description?: string,
   ): Promise<void> {
     await this.ensureInitialized();
     this.mockCollections.add(name);
@@ -71,7 +71,7 @@ class TestVectorDatabase extends BaseVectorDatabase<TestDbConfig> {
 
   async insert(
     collectionName: string,
-    documents: VectorDocument[],
+    _documents: VectorDocument[],
   ): Promise<void> {
     await this.ensureInitialized();
     await this.ensureLoaded(collectionName);
@@ -79,7 +79,7 @@ class TestVectorDatabase extends BaseVectorDatabase<TestDbConfig> {
 
   async insertHybrid(
     collectionName: string,
-    documents: VectorDocument[],
+    _documents: VectorDocument[],
   ): Promise<void> {
     await this.ensureInitialized();
     await this.ensureLoaded(collectionName);
@@ -87,8 +87,8 @@ class TestVectorDatabase extends BaseVectorDatabase<TestDbConfig> {
 
   async search(
     collectionName: string,
-    queryVector: number[],
-    options?: SearchOptions,
+    _queryVector: number[],
+    _options?: SearchOptions,
   ): Promise<VectorSearchResult[]> {
     await this.ensureInitialized();
     await this.ensureLoaded(collectionName);
@@ -97,24 +97,24 @@ class TestVectorDatabase extends BaseVectorDatabase<TestDbConfig> {
 
   async hybridSearch(
     collectionName: string,
-    searchRequests: HybridSearchRequest[],
-    options?: HybridSearchOptions,
+    _searchRequests: HybridSearchRequest[],
+    _options?: HybridSearchOptions,
   ): Promise<HybridSearchResult[]> {
     await this.ensureInitialized();
     await this.ensureLoaded(collectionName);
     return [];
   }
 
-  async delete(collectionName: string, ids: string[]): Promise<void> {
+  async delete(collectionName: string, _ids: string[]): Promise<void> {
     await this.ensureInitialized();
     await this.ensureLoaded(collectionName);
   }
 
   async query(
     collectionName: string,
-    filter: string,
-    outputFields: string[],
-    limit?: number,
+    _filter: string,
+    _outputFields: string[],
+    _limit?: number,
   ): Promise<Record<string, any>[]> {
     await this.ensureInitialized();
     await this.ensureLoaded(collectionName);

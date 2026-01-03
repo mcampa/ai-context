@@ -8,6 +8,7 @@ import {
 } from "fs";
 import { join } from "path";
 import * as childProcess from "child_process";
+import type { SpawnSyncReturns } from "child_process";
 import { findConfigFile, loadConfig, findTsxBinary } from "./config-loader.js";
 
 // Mock fs and child_process modules
@@ -747,7 +748,7 @@ describe("config-loader", () => {
         status: 0,
         stdout: "",
         stderr: "",
-      } as any);
+      } as SpawnSyncReturns<string>);
 
       const result = findTsxBinary();
       expect(result).toBe("tsx");
@@ -768,7 +769,7 @@ describe("config-loader", () => {
         status: 1,
         stdout: "",
         stderr: "",
-      } as any);
+      } as SpawnSyncReturns<string>);
 
       const result = findTsxBinary();
       expect(result).toBeNull();

@@ -12,7 +12,7 @@ class TestEmbedding extends Embedding {
   }
 
   async embed(text: string): Promise<EmbeddingVector> {
-    const processedText = this.preprocessText(text);
+    const _processedText = this.preprocessText(text);
     // Return mock vector
     return {
       vector: new Array(this.dimension).fill(0.1),

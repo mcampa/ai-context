@@ -320,7 +320,7 @@ export class FaissVectorDatabase extends BaseVectorDatabase<FaissConfig> {
   async createCollection(
     collectionName: string,
     dimension: number,
-    description?: string,
+    _description?: string,
   ): Promise<void> {
     await this.ensureInitialized();
 
@@ -364,7 +364,7 @@ export class FaissVectorDatabase extends BaseVectorDatabase<FaissConfig> {
   async createHybridCollection(
     collectionName: string,
     dimension: number,
-    description?: string,
+    _description?: string,
   ): Promise<void> {
     await this.ensureInitialized();
 
